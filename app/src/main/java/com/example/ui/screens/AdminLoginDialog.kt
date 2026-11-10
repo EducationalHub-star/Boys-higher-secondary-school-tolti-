@@ -125,7 +125,13 @@ fun AdminLoginDialog(
                         viewModel.adminLoginError.value = null
                         coroutineScope.launch {
                             try {
-                                val clientId = context.getString(R.string.default_web_client_id)
+                                val resId = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
+                                val clientId = if (resId != 0) context.getString(resId) else null
+                                if (clientId.isNullOrBlank()) {
+                                    viewModel.adminLoginError.value = "Google Sign-In configuration missing: default_web_client_id not found in app resources."
+                                    isGoogleSigningIn = false
+                                    return@launch
+                                }
                                 val signInOption = GetSignInWithGoogleOption.Builder(serverClientId = clientId).build()
                                 val request = GetCredentialRequest.Builder().addCredentialOption(signInOption).build()
                                 val result = credentialManager.getCredential(context as Activity, request)
