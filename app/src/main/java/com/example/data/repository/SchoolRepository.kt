@@ -1,5 +1,6 @@
 package com.example.data.repository
 
+import com.example.data.local.InitialSchoolData
 import com.example.data.local.SchoolDatabase
 import com.example.data.model.AdminActivityLog
 import com.example.data.model.AdminUser
@@ -330,7 +331,13 @@ class SchoolRepository(private val database: SchoolDatabase) {
 
     // --- ADMIN AUTHENTICATION & SECURITY ---
     suspend fun authenticateAdmin(username: String, plainPassword: String): Boolean {
-        val admin = database.adminUserDao().getAdminByUsername(username.trim()) ?: return false
+        var admin = database.adminUserDao().getAdminByUsername(username.trim())
+        if (admin == null && username.trim().equals("admin", ignoreCase = true)) {
+            val initialAdmin = InitialSchoolData.getInitialAdminUser()
+            database.adminUserDao().insertAdmin(initialAdmin)
+            admin = initialAdmin
+        }
+        if (admin == null) return false
         val isValid = SecurityUtils.verifyPassword(plainPassword, admin.salt, admin.passwordHash)
         if (isValid) {
             logAdminAction("ADMIN_LOGIN_SUCCESS", "Admin user '${username}' successfully authenticated.")

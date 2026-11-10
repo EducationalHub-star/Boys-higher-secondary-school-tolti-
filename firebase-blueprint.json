@@ -1,0 +1,44 @@
+{
+  "entities": {
+    "UserProfile": {
+      "collection": "users",
+      "path": "users/{userId}",
+      "fields": {
+        "userId": { "type": "string", "required": true },
+        "email": { "type": "string", "required": true },
+        "displayName": { "type": "string", "required": false },
+        "role": { "type": "string", "required": true },
+        "createdAt": { "type": "timestamp", "required": false }
+      }
+    },
+    "Announcement": {
+      "collection": "announcements",
+      "path": "announcements/{announcementId}",
+      "fields": {
+        "id": { "type": "string", "required": true },
+        "title": { "type": "string", "required": true },
+        "content": { "type": "string", "required": true },
+        "author": { "type": "string", "required": true },
+        "isUrgent": { "type": "boolean", "required": false },
+        "createdAt": { "type": "timestamp", "required": false }
+      }
+    },
+    "StudentResult": {
+      "collection": "student_results",
+      "path": "student_results/{resultId}",
+      "fields": {
+        "id": { "type": "string", "required": true },
+        "studentName": { "type": "string", "required": true },
+        "rollNumber": { "type": "string", "required": true },
+        "classLevel": { "type": "string", "required": true },
+        "section": { "type": "string", "required": true },
+        "examTerm": { "type": "string", "required": true },
+        "totalMaxMarks": { "type": "number", "required": true },
+        "totalObtainedMarks": { "type": "number", "required": true },
+        "grade": { "type": "string", "required": true },
+        "status": { "type": "string", "required": true },
+        "createdAt": { "type": "timestamp", "required": false }
+      }
+    }
+  }
+}

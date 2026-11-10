@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.Firebase
+import com.google.firebase.auth.auth
 import com.example.data.local.InitialSchoolData
 import com.example.data.model.AdminActivityLog
 import com.example.data.model.AttendanceRecord
@@ -352,9 +354,20 @@ class SchoolViewModel(
         }
     }
 
+    fun onGoogleAdminSignInSuccess(email: String, displayName: String?) {
+        isAdminLoggedIn.value = true
+        adminUsername.value = email.substringBefore("@")
+        showAdminLoginDialog.value = false
+        currentSection.value = SchoolAppSection.ADMIN_PANEL
+        _snackbarMessage.value = "Signed in as $email (Firebase Verified)."
+    }
+
     fun logoutAdmin() {
         isAdminLoggedIn.value = false
         currentSection.value = SchoolAppSection.HOME
+        try {
+            com.google.firebase.Firebase.auth.signOut()
+        } catch (_: Exception) {}
         _snackbarMessage.value = "Administrator signed out safely."
     }
 
