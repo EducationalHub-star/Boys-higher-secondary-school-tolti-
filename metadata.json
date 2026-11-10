@@ -1,0 +1,8 @@
+{
+  "name": "Boys Higher Secondary School Tolti",
+  "description": "Official academic portal for Boys Higher Secondary School Tolti to track student assignments with due dates and completion status, input and save student results into Room database for classes 8th to 12th.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
