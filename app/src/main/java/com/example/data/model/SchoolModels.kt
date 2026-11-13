@@ -188,7 +188,8 @@ data class StudentProfileRecord(
     val address: String = "Main Bazar, Tolti, Kharmang",
     val bloodGroup: String = "O+",
     val status: String = "ACTIVE", // "ACTIVE", "ALUMNI", "TRANSFERRED"
-    val notes: String = "Excelling in academics and physical athletics."
+    val notes: String = "Excelling in academics and physical athletics.",
+    val photoUri: String? = null
 )
 
 /**
@@ -207,7 +208,8 @@ data class TeacherProfileRecord(
     val introduction: String,
     val phone: String = "0355-1234567",
     val email: String = "faculty.tolti@edu.pk",
-    val joiningYear: String = "2018"
+    val joiningYear: String = "2018",
+    val photoUri: String? = null
 )
 
 /**
@@ -270,9 +272,28 @@ data class GalleryPhoto(
     val title: String,
     val description: String,
     val category: String, // "School Building", "Classrooms", "Teachers", "School Events", "Sports Activities", "Students' Activities", "Achievements"
-    val drawableResName: String, // drawable name e.g. "reel_cricket", "reel_chai", "reel_fields", "school_logo"
+    val drawableResName: String, // fallback drawable name e.g. "reel_cricket", "reel_chai", "reel_fields", "school_logo"
     val dateUploaded: Long = System.currentTimeMillis(),
-    val isPublished: Boolean = true
+    val isPublished: Boolean = true,
+    val photoUri: String? = null
+)
+
+/**
+ * Student rating and feedback for teachers.
+ */
+@Entity(tableName = "teacher_ratings")
+data class TeacherRating(
+    @PrimaryKey
+    val id: String = UUID.randomUUID().toString(),
+    val teacherId: String,
+    val teacherName: String,
+    val studentName: String = "Student",
+    val studentRollNumber: String = "",
+    val rating: Int = 5, // 1 to 5 stars
+    val feedback: String = "",
+    val subjectName: String = "",
+    val timestamp: Long = System.currentTimeMillis(),
+    val isApproved: Boolean = true
 )
 
 /**

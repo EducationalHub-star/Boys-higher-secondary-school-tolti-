@@ -38,21 +38,27 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.example.R
 import com.example.ui.theme.DeepNavy
 import com.example.ui.theme.ElegantGold
+import com.example.ui.theme.LocalAppDesignConfig
 import com.example.ui.theme.RoyalBlue
 
 /**
  * Official School Emblem for Govt. Higher Secondary School Tolti, Kharmang.
- * Uses the authentic official emblem asset provided by the school administration.
+ * Uses Admin custom logo URI if uploaded, or falls back to the authentic official school_logo.
  */
 @Composable
 fun SchoolEmblem(
     size: Dp = 56.dp,
     modifier: Modifier = Modifier,
-    showBorder: Boolean = true
+    showBorder: Boolean = true,
+    customLogoUri: String? = null
 ) {
+    val designConfig = LocalAppDesignConfig.current
+    val resolvedLogoUri = customLogoUri?.takeIf { it.isNotBlank() } ?: designConfig.customLogoUri?.takeIf { it.isNotBlank() }
+
     Surface(
         modifier = modifier
             .size(size)
@@ -70,14 +76,27 @@ fun SchoolEmblem(
             modifier = Modifier.padding(if (showBorder) 2.dp else 0.dp),
             contentAlignment = Alignment.Center
         ) {
-            Image(
-                painter = painterResource(id = R.drawable.school_logo),
-                contentDescription = "Official Logo of Govt. Higher Secondary School Tolti, Kharmang",
-                modifier = Modifier
-                    .size(size)
-                    .clip(CircleShape),
-                contentScale = ContentScale.Fit
-            )
+            if (resolvedLogoUri != null) {
+                AsyncImage(
+                    model = resolvedLogoUri,
+                    contentDescription = "Official Logo of Govt. Higher Secondary School Tolti, Kharmang",
+                    placeholder = painterResource(id = R.drawable.school_logo),
+                    error = painterResource(id = R.drawable.school_logo),
+                    modifier = Modifier
+                        .size(size)
+                        .clip(CircleShape),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Image(
+                    painter = painterResource(id = R.drawable.school_logo),
+                    contentDescription = "Official Logo of Govt. Higher Secondary School Tolti, Kharmang",
+                    modifier = Modifier
+                        .size(size)
+                        .clip(CircleShape),
+                    contentScale = ContentScale.Fit
+                )
+            }
         }
     }
 }
@@ -91,8 +110,12 @@ fun SchoolEmblem(
 fun CentralSchoolLogo(
     modifier: Modifier = Modifier,
     size: Dp = 76.dp,
-    isUrdu: Boolean = false
+    isUrdu: Boolean = false,
+    customLogoUri: String? = null
 ) {
+    val designConfig = LocalAppDesignConfig.current
+    val resolvedLogoUri = customLogoUri?.takeIf { it.isNotBlank() } ?: designConfig.customLogoUri?.takeIf { it.isNotBlank() }
+
     Column(
         modifier = modifier
             .testTag("central_school_logo_component"),
@@ -127,14 +150,27 @@ fun CentralSchoolLogo(
                     modifier = Modifier.padding(3.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.school_logo),
-                        contentDescription = "Govt. Higher Secondary School Tolti Crest",
-                        modifier = Modifier
-                            .size(size - 6.dp)
-                            .clip(CircleShape),
-                        contentScale = ContentScale.Fit
-                    )
+                    if (resolvedLogoUri != null) {
+                        AsyncImage(
+                            model = resolvedLogoUri,
+                            contentDescription = "Govt. Higher Secondary School Tolti Crest",
+                            placeholder = painterResource(id = R.drawable.school_logo),
+                            error = painterResource(id = R.drawable.school_logo),
+                            modifier = Modifier
+                                .size(size - 6.dp)
+                                .clip(CircleShape),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Image(
+                            painter = painterResource(id = R.drawable.school_logo),
+                            contentDescription = "Govt. Higher Secondary School Tolti Crest",
+                            modifier = Modifier
+                                .size(size - 6.dp)
+                                .clip(CircleShape),
+                            contentScale = ContentScale.Fit
+                        )
+                    }
                 }
             }
         }

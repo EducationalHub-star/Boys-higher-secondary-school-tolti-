@@ -1,6 +1,7 @@
 package com.example.ui.viewmodel
 
 import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -8,7 +9,9 @@ import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
 import com.example.data.local.InitialSchoolData
 import com.example.data.model.AdminActivityLog
+import com.example.data.model.AppDesignConfig
 import com.example.data.model.AttendanceRecord
+import com.example.data.model.ClassSubjectRecord
 import com.example.data.model.CollegeAnnouncement
 import com.example.data.model.DailyAttendance
 import com.example.data.model.FeeRecord
@@ -23,10 +26,14 @@ import com.example.data.model.StudentProfileRecord
 import com.example.data.model.StudentResult
 import com.example.data.model.StudentResults
 import com.example.data.model.TeacherProfileRecord
+import com.example.data.model.TeacherRating
 import com.example.data.model.TimetablePeriod
+import com.example.data.remote.FirestoreSyncHelper
 import com.example.data.repository.SchoolRepository
 import com.example.service.RealtimeNotificationManager
+import com.example.util.MediaStorageHelper
 import com.example.util.UrduLocalization
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,6 +43,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.UUID
 
 enum class SchoolNavTab {
@@ -55,6 +63,21 @@ enum class SchoolAppSection(val englishTitle: String, val urduTitle: String) {
     GALLERY("School Gallery", "گیلری"),
     ABOUT_CONTACT("About & Contact", "ہمارے بارے میں"),
     ADMIN_PANEL("Admin Portal", "ایڈمن پینل")
+}
+
+sealed class DeleteTarget(val title: String, val message: String) {
+    data class Student(val student: StudentProfileRecord) : DeleteTarget("Delete Student Record", "Are you sure you want to remove ${student.fullName} (${student.rollNumber})? This action cannot be undone.")
+    data class Teacher(val teacher: TeacherProfileRecord) : DeleteTarget("Delete Faculty Record", "Are you sure you want to remove faculty profile for ${teacher.name}? This action cannot be undone.")
+    data class TeacherPhoto(val teacher: TeacherProfileRecord) : DeleteTarget("Delete Teacher Photograph", "Remove the profile photograph for ${teacher.name}?")
+    data class Result(val result: StudentResult) : DeleteTarget("Delete Exam Score", "Are you sure you want to delete ${result.subjectName} score for ${result.studentName} (${result.rollNumber})?")
+    data class SubjectResult(val result: StudentResults) : DeleteTarget("Delete Marksheet", "Are you sure you want to delete the complete marksheet for ${result.studentName} (${result.rollNumber})?")
+    data class Fee(val fee: FeeRecord) : DeleteTarget("Delete Fee Record", "Are you sure you want to delete ${fee.feeType} (Rs. ${fee.amount.toInt()}) for ${fee.studentName}?")
+    data class Timetable(val period: TimetablePeriod) : DeleteTarget("Delete Timetable Period", "Are you sure you want to remove Period ${period.periodNumber} (${period.subjectName}) on ${period.dayOfWeek} for Class ${period.classLevel}?")
+    data class Photo(val photo: GalleryPhoto) : DeleteTarget("Delete Gallery Photo", "Are you sure you want to delete photo '${photo.title}' from the school gallery?")
+    data class Announcement(val announcement: CollegeAnnouncement) : DeleteTarget("Delete Notice", "Are you sure you want to delete circular '${announcement.title}'?")
+    data class Assignment(val assignment: StudentAssignment) : DeleteTarget("Delete Assignment", "Are you sure you want to delete assignment '${assignment.title}' for Class ${assignment.classLevel}?")
+    data class Rating(val rating: TeacherRating) : DeleteTarget("Delete Student Review", "Are you sure you want to delete this review for ${rating.teacherName}?")
+    data class ClassSubject(val subject: ClassSubjectRecord) : DeleteTarget("Delete Class Subject", "Are you sure you want to remove ${subject.subjectName} (${subject.subjectCode}) from Class ${subject.classLevel}?")
 }
 
 data class StudentProfile(
@@ -146,6 +169,9 @@ class SchoolViewModel(
     val allTeachers: StateFlow<List<TeacherProfileRecord>> = repository.allTeachersFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val allTeacherRatings: StateFlow<List<TeacherRating>> = repository.allTeacherRatingsFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val allFees: StateFlow<List<FeeRecord>> = repository.allFeesFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -173,6 +199,30 @@ class SchoolViewModel(
     val allAnnouncements: StateFlow<List<CollegeAnnouncement>> = repository.allAnnouncementsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val allClassSubjects: StateFlow<List<ClassSubjectRecord>> = repository.allClassSubjectsFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val publishedDesignConfig: StateFlow<AppDesignConfig> = combine(
+        repository.publishedDesignConfigFlow,
+        MutableStateFlow(Unit)
+    ) { cfg, _ -> cfg ?: AppDesignConfig(id = AppDesignConfig.ID_PUBLISHED) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AppDesignConfig())
+
+    val draftDesignConfig: StateFlow<AppDesignConfig?> = repository.draftDesignConfigFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val previewDesignConfig = MutableStateFlow<AppDesignConfig?>(null)
+    val isPreviewMode = MutableStateFlow(false)
+
+    val activeDesignConfig: StateFlow<AppDesignConfig> = combine(
+        publishedDesignConfig,
+        previewDesignConfig,
+        isPreviewMode,
+        isAdminLoggedIn
+    ) { published, preview, previewing, isAdmin ->
+        if (isAdmin && previewing && preview != null) preview else published
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AppDesignConfig())
+
     val allNotifications: StateFlow<List<SchoolNotification>> = repository.allNotificationsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -195,11 +245,14 @@ class SchoolViewModel(
     val showAddTimetableDialog = MutableStateFlow(false)
     val showUploadPhotoDialog = MutableStateFlow(false)
     val showEditSettingsDialog = MutableStateFlow(false)
+    val showAddClassSubjectDialog = MutableStateFlow(false)
 
     val showNotificationCenter = MutableStateFlow(false)
     val showNotificationSettings = MutableStateFlow(false)
     val showBroadcastAnnouncementDialog = MutableStateFlow(false)
     val showNotificationSimulator = MutableStateFlow(false)
+    val showRateTeacherDialog = MutableStateFlow(false)
+    val teacherForRating = MutableStateFlow<TeacherProfileRecord?>(null)
 
     val selectedAssignmentForDetails = MutableStateFlow<StudentAssignment?>(null)
     val selectedAnnouncementForDetails = MutableStateFlow<CollegeAnnouncement?>(null)
@@ -209,6 +262,48 @@ class SchoolViewModel(
     val selectedSubjectResultCard = MutableStateFlow<StudentResults?>(null)
     val showAddSubjectResultDialog = MutableStateFlow(false)
     val selectedGalleryPhoto = MutableStateFlow<GalleryPhoto?>(null)
+
+    // --- EDITING STATES FOR ADMIN MANAGEMENT ---
+    val editingStudent = MutableStateFlow<StudentProfileRecord?>(null)
+    val editingTeacher = MutableStateFlow<TeacherProfileRecord?>(null)
+    val editingResult = MutableStateFlow<StudentResult?>(null)
+    val editingSubjectResult = MutableStateFlow<StudentResults?>(null)
+    val editingFee = MutableStateFlow<FeeRecord?>(null)
+    val editingTimetable = MutableStateFlow<TimetablePeriod?>(null)
+    val editingPhoto = MutableStateFlow<GalleryPhoto?>(null)
+    val editingAnnouncement = MutableStateFlow<CollegeAnnouncement?>(null)
+    val editingAssignment = MutableStateFlow<StudentAssignment?>(null)
+    val editingClassSubject = MutableStateFlow<ClassSubjectRecord?>(null)
+
+    // --- DELETE CONFIRMATION STATE ---
+    val deleteConfirmationTarget = MutableStateFlow<DeleteTarget?>(null)
+
+    fun requestDelete(target: DeleteTarget) {
+        deleteConfirmationTarget.value = target
+    }
+
+    fun cancelDelete() {
+        deleteConfirmationTarget.value = null
+    }
+
+    fun confirmDelete() {
+        val target = deleteConfirmationTarget.value ?: return
+        deleteConfirmationTarget.value = null
+        when (target) {
+            is DeleteTarget.Student -> deleteStudent(target.student)
+            is DeleteTarget.Teacher -> deleteTeacher(target.teacher)
+            is DeleteTarget.TeacherPhoto -> deleteTeacherPhoto(target.teacher)
+            is DeleteTarget.Result -> deleteResult(target.result)
+            is DeleteTarget.SubjectResult -> deleteStudentSubjectResults(target.result)
+            is DeleteTarget.Fee -> deleteFee(target.fee)
+            is DeleteTarget.Timetable -> deleteTimetablePeriod(target.period)
+            is DeleteTarget.Photo -> deleteGalleryPhoto(target.photo)
+            is DeleteTarget.Announcement -> deleteAnnouncement(target.announcement)
+            is DeleteTarget.Assignment -> deleteAssignment(target.assignment)
+            is DeleteTarget.Rating -> deleteTeacherRating(target.rating)
+            is DeleteTarget.ClassSubject -> deleteClassSubject(target.subject)
+        }
+    }
 
     private val _snackbarMessage = MutableStateFlow<String?>(null)
     val snackbarMessage: StateFlow<String?> = _snackbarMessage.asStateFlow()
@@ -416,7 +511,8 @@ class SchoolViewModel(
         contactPhone: String,
         address: String,
         bloodGroup: String,
-        notes: String
+        notes: String,
+        photoUri: String? = null
     ) {
         viewModelScope.launch {
             val student = StudentProfileRecord(
@@ -430,10 +526,12 @@ class SchoolViewModel(
                 contactPhone = contactPhone,
                 address = address,
                 bloodGroup = bloodGroup,
-                notes = notes
+                notes = notes,
+                photoUri = photoUri
             )
             repository.insertStudent(student)
             showAddStudentDialog.value = false
+            editingStudent.value = null
             _snackbarMessage.value = "Enrolled student '${fullName}' ($rollNumber) in Class $classLevel."
         }
     }
@@ -441,6 +539,8 @@ class SchoolViewModel(
     fun updateStudent(student: StudentProfileRecord) {
         viewModelScope.launch {
             repository.updateStudent(student)
+            showAddStudentDialog.value = false
+            editingStudent.value = null
             _snackbarMessage.value = "Updated student profile for ${student.fullName}."
         }
     }
@@ -463,37 +563,234 @@ class SchoolViewModel(
         assignedClasses: String,
         introduction: String,
         phone: String,
-        email: String
+        email: String,
+        photoUri: String? = null,
+        id: String = UUID.randomUUID().toString()
     ) {
         viewModelScope.launch {
-            val teacher = TeacherProfileRecord(
-                name = name,
-                designation = designation,
-                department = department,
-                qualification = qualification,
-                assignedSubjects = assignedSubjects,
-                assignedClasses = assignedClasses,
-                introduction = introduction,
-                phone = phone,
-                email = email
-            )
-            repository.insertTeacher(teacher)
-            showAddTeacherDialog.value = false
-            _snackbarMessage.value = "Added faculty member '${name}' to $department."
+            try {
+                val validatedPhotoUri = if (!photoUri.isNullOrBlank() && MediaStorageHelper.hasValidPhoto(photoUri)) photoUri else null
+                val teacher = TeacherProfileRecord(
+                    id = id,
+                    name = name,
+                    designation = designation,
+                    department = department,
+                    qualification = qualification,
+                    assignedSubjects = assignedSubjects,
+                    assignedClasses = assignedClasses,
+                    introduction = introduction,
+                    phone = phone,
+                    email = email,
+                    photoUri = validatedPhotoUri
+                )
+                repository.insertTeacher(teacher)
+                showAddTeacherDialog.value = false
+                editingTeacher.value = null
+                _snackbarMessage.value = "Added faculty member '${name}' to $department."
+            } catch (e: Exception) {
+                _snackbarMessage.value = "Failed to save teacher '${name}': ${e.localizedMessage ?: "Database error"}"
+            }
         }
     }
 
     fun updateTeacher(teacher: TeacherProfileRecord) {
         viewModelScope.launch {
-            repository.updateTeacher(teacher)
-            _snackbarMessage.value = "Updated faculty profile for ${teacher.name}."
+            try {
+                val validatedPhotoUri = if (!teacher.photoUri.isNullOrBlank() && MediaStorageHelper.hasValidPhoto(teacher.photoUri)) {
+                    teacher.photoUri
+                } else null
+                repository.updateTeacher(teacher.copy(photoUri = validatedPhotoUri))
+                showAddTeacherDialog.value = false
+                editingTeacher.value = null
+                _snackbarMessage.value = "Updated faculty profile for ${teacher.name}."
+            } catch (e: Exception) {
+                _snackbarMessage.value = "Failed to update '${teacher.name}': ${e.localizedMessage ?: "Database error"}"
+            }
+        }
+    }
+
+    fun updateTeacherPhotoFromUri(teacher: TeacherProfileRecord, sourceUri: Uri) {
+        val appCtx = context
+        if (appCtx == null) {
+            _snackbarMessage.value = "Unable to access app storage for saving photo."
+            return
+        }
+        viewModelScope.launch {
+            val savedUri = withContext(Dispatchers.IO) {
+                MediaStorageHelper.saveTeacherPhoto(appCtx, sourceUri, teacher.id)
+            }
+            if (savedUri == null || !MediaStorageHelper.hasValidPhoto(savedUri)) {
+                _snackbarMessage.value = "Could not import selected photo for ${teacher.name}."
+                return@launch
+            }
+            try {
+                repository.updateTeacherPhoto(teacher.id, savedUri)
+                _snackbarMessage.value = "Saved profile photograph for ${teacher.name}."
+            } catch (e: Exception) {
+                MediaStorageHelper.deleteLocalMediaIfManaged(savedUri)
+                _snackbarMessage.value = "Database error saving photo for ${teacher.name}."
+            }
+        }
+    }
+
+    fun deleteTeacherPhoto(teacher: TeacherProfileRecord) {
+        viewModelScope.launch {
+            try {
+                repository.updateTeacherPhoto(teacher.id, null)
+                _snackbarMessage.value = "Removed profile photograph for ${teacher.name}."
+            } catch (e: Exception) {
+                _snackbarMessage.value = "Failed to remove photograph for ${teacher.name}."
+            }
         }
     }
 
     fun deleteTeacher(teacher: TeacherProfileRecord) {
         viewModelScope.launch {
-            repository.deleteTeacher(teacher)
-            _snackbarMessage.value = "Removed faculty profile '${teacher.name}'."
+            try {
+                repository.deleteTeacher(teacher)
+                _snackbarMessage.value = "Removed faculty profile '${teacher.name}'."
+            } catch (e: Exception) {
+                _snackbarMessage.value = "Failed to delete teacher '${teacher.name}'."
+            }
+        }
+    }
+
+    // --- TEACHER RATING & MODERATION ACTIONS ---
+
+    fun submitTeacherRating(
+        teacher: TeacherProfileRecord,
+        studentName: String,
+        studentRollNumber: String,
+        rating: Int,
+        feedback: String,
+        subjectName: String,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val cleanRoll = studentRollNumber.trim().uppercase()
+            val cleanName = studentName.trim()
+            val cleanFeedback = feedback.trim()
+
+            if (rating !in 1..5) {
+                onResult(false, "Please select a rating between 1 and 5 stars.")
+                return@launch
+            }
+            if (cleanRoll.isBlank()) {
+                onResult(false, "Please enter your Roll Number to prevent duplicate reviews.")
+                return@launch
+            }
+            val blockedTerms = listOf("stupid", "idiot", "hate", "trash", "useless", "scam", "fuck", "shit")
+            if (blockedTerms.any { cleanFeedback.contains(it, ignoreCase = true) }) {
+                val flagged = TeacherRating(
+                    teacherId = teacher.id,
+                    teacherName = teacher.name,
+                    studentName = cleanName.ifBlank { "Student ($cleanRoll)" },
+                    studentRollNumber = cleanRoll,
+                    rating = rating,
+                    feedback = cleanFeedback,
+                    subjectName = subjectName.trim(),
+                    isApproved = false
+                )
+                repository.insertTeacherRating(flagged)
+                onResult(false, "Your feedback was flagged for review by administration due to language policy.")
+                return@launch
+            }
+
+            val existing = allTeacherRatings.value.find {
+                it.teacherId == teacher.id && it.studentRollNumber.equals(cleanRoll, ignoreCase = true)
+            }
+            if (existing != null) {
+                val now = System.currentTimeMillis()
+                if (now - existing.timestamp < 60_000L) {
+                    onResult(false, "You already submitted a rating for ${teacher.name} recently.")
+                    return@launch
+                }
+                val updated = existing.copy(
+                    studentName = cleanName.ifBlank { existing.studentName },
+                    rating = rating,
+                    feedback = cleanFeedback,
+                    subjectName = subjectName.trim().ifBlank { existing.subjectName },
+                    timestamp = now,
+                    isApproved = true
+                )
+                repository.updateTeacherRating(updated)
+                FirestoreSyncHelper.syncTeacherRating(context, updated)
+                onResult(true, "Updated your rating for ${teacher.name} ($rating★).")
+                _snackbarMessage.value = "Updated your rating for ${teacher.name}."
+            } else {
+                val newRating = TeacherRating(
+                    teacherId = teacher.id,
+                    teacherName = teacher.name,
+                    studentName = cleanName.ifBlank { "Student ($cleanRoll)" },
+                    studentRollNumber = cleanRoll,
+                    rating = rating,
+                    feedback = cleanFeedback,
+                    subjectName = subjectName.trim(),
+                    isApproved = true
+                )
+                repository.insertTeacherRating(newRating)
+                FirestoreSyncHelper.syncTeacherRating(context, newRating)
+                onResult(true, "Thank you! Submitted $rating★ rating for ${teacher.name}.")
+                _snackbarMessage.value = "Rating submitted for ${teacher.name}!"
+            }
+        }
+    }
+
+    fun moderateTeacherRating(rating: TeacherRating, approve: Boolean) {
+        viewModelScope.launch {
+            repository.setRatingApproval(rating.id, approve)
+            _snackbarMessage.value = if (approve) "Review approved & visible." else "Review hidden from public."
+        }
+    }
+
+    fun deleteTeacherRating(rating: TeacherRating) {
+        viewModelScope.launch {
+            repository.deleteTeacherRating(rating)
+            _snackbarMessage.value = "Deleted review for ${rating.teacherName}."
+        }
+    }
+
+    // --- CLASSES & SUBJECTS CRUD ---
+
+    fun addClassSubject(
+        classLevel: String,
+        subjectName: String,
+        subjectCode: String,
+        teacherName: String,
+        maxMarks: Int,
+        passMarks: Int,
+        isCompulsory: Boolean
+    ) {
+        viewModelScope.launch {
+            val item = ClassSubjectRecord(
+                classLevel = classLevel,
+                subjectName = subjectName.trim(),
+                subjectCode = subjectCode.trim().uppercase(),
+                teacherName = teacherName.trim(),
+                maxMarks = maxMarks,
+                passMarks = passMarks,
+                isCompulsory = isCompulsory
+            )
+            repository.insertClassSubject(item)
+            showAddClassSubjectDialog.value = false
+            editingClassSubject.value = null
+            _snackbarMessage.value = "Added ${item.subjectName} to Class ${item.classLevel}."
+        }
+    }
+
+    fun updateClassSubject(item: ClassSubjectRecord) {
+        viewModelScope.launch {
+            repository.updateClassSubject(item)
+            showAddClassSubjectDialog.value = false
+            editingClassSubject.value = null
+            _snackbarMessage.value = "Updated ${item.subjectName} (${item.subjectCode})."
+        }
+    }
+
+    fun deleteClassSubject(item: ClassSubjectRecord) {
+        viewModelScope.launch {
+            repository.deleteClassSubject(item)
+            _snackbarMessage.value = "Removed ${item.subjectName} from Class ${item.classLevel}."
         }
     }
 
@@ -528,6 +825,7 @@ class SchoolViewModel(
                 isPublished = isPublished
             )
             repository.insertResult(result)
+            FirestoreSyncHelper.syncStudentResult(context, result)
             showAdminResultDialog.value = false
 
             // Real-time alert
@@ -556,6 +854,14 @@ class SchoolViewModel(
             } else {
                 "Unpublished result for ${result.studentName} (hidden from public view)"
             }
+        }
+    }
+
+    fun updateResult(result: StudentResult) {
+        viewModelScope.launch {
+            repository.updateResult(result)
+            FirestoreSyncHelper.syncStudentResult(context, result)
+            _snackbarMessage.value = "Updated result for ${result.studentName} (${result.subjectName})."
         }
     }
 
@@ -636,6 +942,15 @@ class SchoolViewModel(
         }
     }
 
+    fun updateTimetablePeriod(period: TimetablePeriod) {
+        viewModelScope.launch {
+            repository.updateTimetablePeriod(period)
+            showAddTimetableDialog.value = false
+            editingTimetable.value = null
+            _snackbarMessage.value = "Updated Period ${period.periodNumber} (${period.subjectName})."
+        }
+    }
+
     // --- FEES ACTIONS ---
 
     fun recordFee(
@@ -688,6 +1003,15 @@ class SchoolViewModel(
         }
     }
 
+    fun updateFee(fee: FeeRecord) {
+        viewModelScope.launch {
+            repository.updateFee(fee)
+            showRecordFeeDialog.value = false
+            editingFee.value = null
+            _snackbarMessage.value = "Updated fee record for ${fee.studentName}."
+        }
+    }
+
     // --- DAILY ATTENDANCE ACTIONS ---
 
     fun markStudentDailyAttendance(rollNo: String, name: String, classLevel: String, date: String, status: String) {
@@ -713,17 +1037,78 @@ class SchoolViewModel(
         category: String,
         drawableResName: String
     ) {
+        uploadGalleryPhotoWithUri(
+            title = title,
+            description = description,
+            category = category,
+            photoUri = null,
+            drawableResName = if (drawableResName.isBlank()) "school_logo" else drawableResName
+        )
+    }
+
+    fun uploadGalleryPhotoWithUri(
+        title: String,
+        description: String,
+        category: String,
+        photoUri: String?,
+        drawableResName: String = "school_logo"
+    ) {
         viewModelScope.launch {
             val photo = GalleryPhoto(
                 title = title,
                 description = description,
                 category = category,
-                drawableResName = if (drawableResName.isBlank()) "school_logo" else drawableResName,
+                drawableResName = drawableResName,
+                photoUri = photoUri,
                 isPublished = true
             )
             repository.insertGalleryPhoto(photo)
+            FirestoreSyncHelper.syncGalleryPhoto(context, photo)
             showUploadPhotoDialog.value = false
+            editingPhoto.value = null
             _snackbarMessage.value = "Added photo '${title}' to school gallery."
+        }
+    }
+
+    fun uploadMultipleGalleryPhotos(
+        titleBase: String,
+        description: String,
+        category: String,
+        photoUris: List<String>
+    ) {
+        viewModelScope.launch {
+            photoUris.forEachIndexed { idx, uriStr ->
+                val title = if (photoUris.size > 1) "${titleBase.trim()} #${idx + 1}" else titleBase.trim()
+                val photo = GalleryPhoto(
+                    title = title,
+                    description = description.trim(),
+                    category = category,
+                    drawableResName = "school_logo",
+                    photoUri = uriStr,
+                    isPublished = true
+                )
+                repository.insertGalleryPhoto(photo)
+            }
+            showUploadPhotoDialog.value = false
+            editingPhoto.value = null
+            _snackbarMessage.value = "Uploaded ${photoUris.size} photo(s) to school gallery."
+        }
+    }
+
+    fun toggleGalleryPhotoPublish(photo: GalleryPhoto) {
+        viewModelScope.launch {
+            val newStatus = !photo.isPublished
+            repository.togglePhotoPublish(photo.id, newStatus)
+            _snackbarMessage.value = if (newStatus) "Photo '${photo.title}' is now visible to students." else "Photo '${photo.title}' hidden from public gallery."
+        }
+    }
+
+    fun updateGalleryPhoto(photo: GalleryPhoto) {
+        viewModelScope.launch {
+            repository.updateGalleryPhoto(photo)
+            showUploadPhotoDialog.value = false
+            editingPhoto.value = null
+            _snackbarMessage.value = "Updated photo '${photo.title}' in gallery."
         }
     }
 
@@ -731,6 +1116,53 @@ class SchoolViewModel(
         viewModelScope.launch {
             repository.deleteGalleryPhoto(photo)
             _snackbarMessage.value = "Deleted photo '${photo.title}' from gallery."
+        }
+    }
+
+    // --- DESIGN & APPEARANCE CUSTOMIZATION ---
+
+    fun startDesignPreview(draft: AppDesignConfig) {
+        previewDesignConfig.value = draft
+        isPreviewMode.value = true
+        _snackbarMessage.value = "Live Preview enabled! Inspect changes across the app."
+    }
+
+    fun updateLivePreview(draft: AppDesignConfig) {
+        if (isPreviewMode.value) {
+            previewDesignConfig.value = draft
+        }
+    }
+
+    fun exitDesignPreview() {
+        isPreviewMode.value = false
+        previewDesignConfig.value = null
+        _snackbarMessage.value = "Exited preview mode."
+    }
+
+    fun saveDraftDesign(draft: AppDesignConfig) {
+        viewModelScope.launch {
+            repository.saveDraftDesignConfig(draft)
+            previewDesignConfig.value = draft
+            _snackbarMessage.value = "Design draft saved. Click 'Publish' when ready to apply for students."
+        }
+    }
+
+    fun publishDesign(config: AppDesignConfig) {
+        viewModelScope.launch {
+            repository.publishDesignConfig(config)
+            FirestoreSyncHelper.syncPublishedDesignConfig(context, config)
+            isPreviewMode.value = false
+            previewDesignConfig.value = null
+            _snackbarMessage.value = "Design & Layout changes published across the entire app!"
+        }
+    }
+
+    fun resetDesignToDefault() {
+        viewModelScope.launch {
+            repository.resetDesignConfigToDefault()
+            isPreviewMode.value = false
+            previewDesignConfig.value = null
+            _snackbarMessage.value = "Original CampusConnect default theme & layout restored."
         }
     }
 
@@ -906,6 +1338,7 @@ class SchoolViewModel(
                 isUrgent = isUrgent
             )
             repository.insertAnnouncement(announcement)
+            FirestoreSyncHelper.syncAnnouncement(context, announcement)
             showBroadcastAnnouncementDialog.value = false
 
             postNotification(
@@ -926,6 +1359,15 @@ class SchoolViewModel(
             val newStatus = !announcement.isPublished
             repository.toggleAnnouncementPublish(announcement.id, newStatus)
             _snackbarMessage.value = if (newStatus) "Published notice '${announcement.title}'" else "Unpublished notice"
+        }
+    }
+
+    fun updateAnnouncement(announcement: CollegeAnnouncement) {
+        viewModelScope.launch {
+            repository.updateAnnouncement(announcement)
+            showBroadcastAnnouncementDialog.value = false
+            editingAnnouncement.value = null
+            _snackbarMessage.value = "Updated notice '${announcement.title}'."
         }
     }
 
@@ -1086,6 +1528,15 @@ class SchoolViewModel(
             )
 
             _snackbarMessage.value = "New assignment '${title}' saved & notification dispatched!"
+        }
+    }
+
+    fun updateAssignment(assignment: StudentAssignment) {
+        viewModelScope.launch {
+            repository.updateAssignment(assignment)
+            showAddAssignmentDialog.value = false
+            editingAssignment.value = null
+            _snackbarMessage.value = "Updated assignment '${assignment.title}'."
         }
     }
 

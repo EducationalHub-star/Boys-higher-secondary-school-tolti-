@@ -41,6 +41,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.example.data.model.TimetablePeriod
 import com.example.ui.theme.DeepNavy
 import com.example.ui.theme.RoyalBlue
 import com.example.ui.viewmodel.SchoolViewModel
@@ -49,15 +50,17 @@ import com.example.ui.viewmodel.SchoolViewModel
 @Composable
 fun AddTimetableDialog(
     viewModel: SchoolViewModel,
+    existingPeriod: TimetablePeriod? = null,
     onDismiss: () -> Unit
 ) {
-    var classLevel by remember { mutableStateOf("12th") }
-    var dayOfWeek by remember { mutableStateOf("Monday") }
-    var periodNumber by remember { mutableIntStateOf(1) }
-    var timeRange by remember { mutableStateOf("08:30 AM - 09:15 AM") }
-    var subjectName by remember { mutableStateOf("Physics") }
-    var teacherName by remember { mutableStateOf("Sir Ghulam Nabi") }
-    var roomName by remember { mutableStateOf("Room 204") }
+    val isEditing = existingPeriod != null
+    var classLevel by remember(existingPeriod?.id) { mutableStateOf(existingPeriod?.classLevel ?: "12th") }
+    var dayOfWeek by remember(existingPeriod?.id) { mutableStateOf(existingPeriod?.dayOfWeek ?: "Monday") }
+    var periodNumber by remember(existingPeriod?.id) { mutableIntStateOf(existingPeriod?.periodNumber ?: 1) }
+    var timeRange by remember(existingPeriod?.id) { mutableStateOf(existingPeriod?.timeRange ?: "08:30 AM - 09:15 AM") }
+    var subjectName by remember(existingPeriod?.id) { mutableStateOf(existingPeriod?.subjectName ?: "Physics") }
+    var teacherName by remember(existingPeriod?.id) { mutableStateOf(existingPeriod?.teacherName ?: "Sir Ghulam Nabi") }
+    var roomName by remember(existingPeriod?.id) { mutableStateOf(existingPeriod?.roomName ?: "Room 204") }
 
     var classExpanded by remember { mutableStateOf(false) }
     var dayExpanded by remember { mutableStateOf(false) }
@@ -72,7 +75,7 @@ fun AddTimetableDialog(
                 Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = RoyalBlue)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Schedule Timetable Period",
+                    text = if (isEditing) "Edit Timetable Period" else "Schedule Timetable Period",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = DeepNavy
@@ -197,15 +200,29 @@ fun AddTimetableDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    viewModel.addTimetablePeriod(
-                        classLevel = classLevel,
-                        dayOfWeek = dayOfWeek,
-                        periodNumber = periodNumber,
-                        timeRange = timeRange.trim(),
-                        subjectName = subjectName.trim(),
-                        teacherName = teacherName.trim(),
-                        roomName = roomName.trim()
-                    )
+                    if (existingPeriod == null) {
+                        viewModel.addTimetablePeriod(
+                            classLevel = classLevel,
+                            dayOfWeek = dayOfWeek,
+                            periodNumber = periodNumber,
+                            timeRange = timeRange.trim(),
+                            subjectName = subjectName.trim(),
+                            teacherName = teacherName.trim(),
+                            roomName = roomName.trim()
+                        )
+                    } else {
+                        viewModel.updateTimetablePeriod(
+                            existingPeriod.copy(
+                                classLevel = classLevel,
+                                dayOfWeek = dayOfWeek,
+                                periodNumber = periodNumber,
+                                timeRange = timeRange.trim(),
+                                subjectName = subjectName.trim(),
+                                teacherName = teacherName.trim(),
+                                roomName = roomName.trim()
+                            )
+                        )
+                    }
                     onDismiss()
                 },
                 enabled = subjectName.isNotBlank() && teacherName.isNotBlank(),
@@ -213,7 +230,7 @@ fun AddTimetableDialog(
                 shape = RoundedCornerShape(8.dp),
                 modifier = Modifier.testTag("save_timetable_btn")
             ) {
-                Text("Add Period")
+                Text(if (isEditing) "Update Period" else "Add Period")
             }
         },
         dismissButton = {
@@ -226,3 +243,4 @@ fun AddTimetableDialog(
         }
     )
 }
+

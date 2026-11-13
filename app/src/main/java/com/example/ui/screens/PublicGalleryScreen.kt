@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -22,11 +23,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.ZoomIn
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -51,8 +57,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import coil.compose.AsyncImage
 import com.example.R
 import com.example.data.model.GalleryPhoto
+import com.example.ui.theme.LocalAppDesignConfig
+import com.example.ui.theme.designButtonShape
+import com.example.ui.theme.designCardBorder
+import com.example.ui.theme.designCardColors
+import com.example.ui.theme.designCardShape
+import com.example.ui.viewmodel.DeleteTarget
 import com.example.ui.viewmodel.SchoolViewModel
 import com.example.util.UrduLocalization
 
@@ -64,9 +77,11 @@ fun PublicGalleryScreen(
     val language by viewModel.currentLanguage.collectAsState()
     val isUrdu = language == UrduLocalization.Language.URDU
     val allPhotos by viewModel.allGalleryPhotos.collectAsState()
+    val publishedPhotos by viewModel.publishedGalleryPhotos.collectAsState()
     val selectedCategory by viewModel.galleryCategoryFilter.collectAsState()
     val selectedPhoto by viewModel.selectedGalleryPhoto.collectAsState()
     val isAdmin by viewModel.isAdminLoggedIn.collectAsState()
+    val designConfig = LocalAppDesignConfig.current
 
     val categories = listOf(
         "ALL",
@@ -79,7 +94,8 @@ fun PublicGalleryScreen(
         "Achievements"
     )
 
-    val filtered = allPhotos.filter {
+    val sourcePhotos = if (isAdmin) allPhotos else publishedPhotos
+    val filtered = sourcePhotos.filter {
         selectedCategory == "ALL" || it.category == selectedCategory
     }
 
@@ -103,13 +119,60 @@ fun PublicGalleryScreen(
                         text = if (isUrdu) "اسکول تصویری گیلری" else "Campus Photo Gallery",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF0B192C)
+                        color = MaterialTheme.colorScheme.onBackground
                     )
                     Text(
                         text = if (isUrdu) "بوائز ہائر سیکنڈری اسکول تولتی کی علمی، تدریسی و کھیلوں کی سرگرمیاں" else "Visual moments from academic labs, campus grounds, sports and achievements",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF64748B)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+            }
+
+            // Admin Direct Upload Card
+            if (isAdmin) {
+                item {
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        shape = designCardShape(designConfig),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Admin Photo Manager",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                                Text(
+                                    text = "Upload single or multiple photos from your phone gallery",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Button(
+                                onClick = {
+                                    viewModel.editingPhoto.value = null
+                                    viewModel.showUploadPhotoDialog.value = true
+                                },
+                                shape = designButtonShape(designConfig),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                modifier = Modifier.testTag("gallery_admin_upload_btn")
+                            ) {
+                                Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Upload", fontSize = 12.sp)
+                            }
+                        }
+                    }
                 }
             }
 
@@ -118,7 +181,7 @@ fun PublicGalleryScreen(
                 Surface(
                     color = Color(0xFFEFF6FF),
                     shape = RoundedCornerShape(12.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFBFDBFE))
+                    border = BorderStroke(1.dp, Color(0xFFBFDBFE))
                 ) {
                     Row(
                         modifier = Modifier.padding(12.dp),
@@ -146,8 +209,8 @@ fun PublicGalleryScreen(
                             onClick = { viewModel.galleryCategoryFilter.value = cat },
                             label = { Text(cat, fontSize = 11.sp) },
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = Color(0xFF0B192C),
-                                selectedLabelColor = Color.White
+                                selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimary
                             )
                         )
                     }
@@ -160,7 +223,12 @@ fun PublicGalleryScreen(
                     photo = photo,
                     isAdmin = isAdmin,
                     onClick = { viewModel.selectedGalleryPhoto.value = photo },
-                    onDelete = { viewModel.deleteGalleryPhoto(photo) }
+                    onEdit = {
+                        viewModel.editingPhoto.value = photo
+                        viewModel.showUploadPhotoDialog.value = true
+                    },
+                    onTogglePublish = { viewModel.toggleGalleryPhotoPublish(photo) },
+                    onDelete = { viewModel.requestDelete(DeleteTarget.Photo(photo)) }
                 )
             }
         }
@@ -168,13 +236,16 @@ fun PublicGalleryScreen(
         // Upload FAB for Admin
         if (isAdmin) {
             FloatingActionButton(
-                onClick = { viewModel.showUploadPhotoDialog.value = true },
+                onClick = {
+                    viewModel.editingPhoto.value = null
+                    viewModel.showUploadPhotoDialog.value = true
+                },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(contentPadding)
                     .padding(16.dp)
                     .testTag("admin_upload_photo_fab"),
-                containerColor = Color(0xFF0B192C),
+                containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = Color(0xFFFBBF24)
             ) {
                 Icon(imageVector = Icons.Default.Add, contentDescription = "Upload Photo")
@@ -196,38 +267,54 @@ private fun GalleryPhotoCard(
     photo: GalleryPhoto,
     isAdmin: Boolean,
     onClick: () -> Unit,
+    onEdit: () -> Unit,
+    onTogglePublish: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val designConfig = LocalAppDesignConfig.current
     val drawableRes = when (photo.drawableResName) {
         "reel_cricket" -> R.drawable.reel_cricket
         "reel_chai" -> R.drawable.reel_chai
         "reel_fields" -> R.drawable.reel_fields
         "student_avatar" -> R.drawable.student_avatar
+        "reel_music" -> R.drawable.reel_music
         else -> R.drawable.school_logo
     }
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(designCardShape(designConfig))
             .clickable { onClick() }
             .testTag("gallery_card_${photo.id}"),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+        shape = designCardShape(designConfig),
+        colors = designCardColors(designConfig),
+        border = designCardBorder(designConfig),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (designConfig.cardStyle == "OUTLINED") 0.dp else 3.dp)
     ) {
         Column {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(180.dp)
+                    .height(190.dp)
             ) {
-                Image(
-                    painter = painterResource(id = drawableRes),
-                    contentDescription = photo.title,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
+                if (!photo.photoUri.isNullOrBlank()) {
+                    AsyncImage(
+                        model = photo.photoUri,
+                        contentDescription = photo.title,
+                        placeholder = painterResource(id = drawableRes),
+                        error = painterResource(id = drawableRes),
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Image(
+                        painter = painterResource(id = drawableRes),
+                        contentDescription = photo.title,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                }
 
                 // Category tag on image
                 Surface(
@@ -242,6 +329,24 @@ private fun GalleryPhotoCard(
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                     )
+                }
+
+                if (isAdmin && !photo.isPublished) {
+                    Surface(
+                        color = Color(0xFFDC2626).copy(alpha = 0.9f),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(8.dp)
+                    ) {
+                        Text(
+                            text = "HIDDEN",
+                            color = Color.White,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
                 }
 
                 // Zoom icon
@@ -269,13 +374,45 @@ private fun GalleryPhotoCard(
                         text = photo.title,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF0B192C),
+                        color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.weight(1f)
                     )
 
                     if (isAdmin) {
-                        IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
-                            Icon(imageVector = Icons.Default.Delete, contentDescription = "Delete", tint = Color(0xFFDC2626), modifier = Modifier.size(18.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                onClick = onEdit,
+                                modifier = Modifier.size(48.dp).testTag("edit_photo_btn_${photo.id}")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = "Edit Photo",
+                                    tint = MaterialTheme.colorScheme.secondary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            IconButton(
+                                onClick = onTogglePublish,
+                                modifier = Modifier.size(48.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (photo.isPublished) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                    contentDescription = if (photo.isPublished) "Hide Photo" else "Publish Photo",
+                                    tint = if (photo.isPublished) Color(0xFF059669) else Color(0xFF64748B),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            IconButton(
+                                onClick = onDelete,
+                                modifier = Modifier.size(48.dp).testTag("delete_photo_btn_${photo.id}")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = "Delete Photo",
+                                    tint = Color(0xFFDC2626),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -283,7 +420,7 @@ private fun GalleryPhotoCard(
                 Text(
                     text = photo.description,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF64748B),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
                     modifier = Modifier.padding(top = 2.dp)
                 )
@@ -302,6 +439,7 @@ private fun PhotoLightboxDialog(
         "reel_chai" -> R.drawable.reel_chai
         "reel_fields" -> R.drawable.reel_fields
         "student_avatar" -> R.drawable.student_avatar
+        "reel_music" -> R.drawable.reel_music
         else -> R.drawable.school_logo
     }
 
@@ -310,43 +448,55 @@ private fun PhotoLightboxDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(20.dp)),
-            color = Color.White,
+            color = MaterialTheme.colorScheme.surface,
             tonalElevation = 8.dp
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(260.dp)
+                        .height(280.dp)
                 ) {
-                    Image(
-                        painter = painterResource(id = drawableRes),
-                        contentDescription = photo.title,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
+                    if (!photo.photoUri.isNullOrBlank()) {
+                        AsyncImage(
+                            model = photo.photoUri,
+                            contentDescription = photo.title,
+                            placeholder = painterResource(id = drawableRes),
+                            error = painterResource(id = drawableRes),
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Image(
+                            painter = painterResource(id = drawableRes),
+                            contentDescription = photo.title,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
                     IconButton(
                         onClick = onDismiss,
                         modifier = Modifier
                             .align(Alignment.TopEnd)
                             .padding(8.dp)
                             .background(Color.Black.copy(alpha = 0.6f), CircleShape)
-                            .size(32.dp)
+                            .size(48.dp)
                     ) {
-                        Icon(imageVector = Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(18.dp))
+                        Icon(imageVector = Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(20.dp))
                     }
                 }
 
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Surface(color = Color(0xFF1D4ED8).copy(alpha = 0.12f), shape = RoundedCornerShape(4.dp)) {
-                        Text(photo.category, fontSize = 10.sp, color = Color(0xFF1D4ED8), fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                    Surface(color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f), shape = RoundedCornerShape(4.dp)) {
+                        Text(photo.category, fontSize = 10.sp, color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
                     }
                     Spacer(modifier = Modifier.height(6.dp))
-                    Text(photo.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color(0xFF0B192C))
+                    Text(photo.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text(photo.description, style = MaterialTheme.typography.bodyMedium, color = Color(0xFF475569))
+                    Text(photo.description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
     }
 }
+

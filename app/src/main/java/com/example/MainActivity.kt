@@ -11,6 +11,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
 import com.example.ui.SchoolAppRoot
 import com.example.ui.theme.SchoolAcademicTheme
@@ -45,7 +47,9 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            SchoolAcademicTheme {
+            val activeDesignConfig by viewModel.activeDesignConfig.collectAsState()
+
+            SchoolAcademicTheme(designConfig = activeDesignConfig) {
                 SchoolAppRoot(viewModel = viewModel)
             }
         }

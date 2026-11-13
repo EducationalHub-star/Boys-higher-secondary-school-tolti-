@@ -22,8 +22,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.PublicOff
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
@@ -34,6 +38,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -54,7 +59,13 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.CollegeAnnouncement
 import com.example.ui.theme.DeepNavy
 import com.example.ui.theme.ElegantGold
+import com.example.ui.theme.LocalAppDesignConfig
 import com.example.ui.theme.RoyalBlue
+import com.example.ui.theme.designButtonShape
+import com.example.ui.theme.designCardBorder
+import com.example.ui.theme.designCardColors
+import com.example.ui.theme.designCardShape
+import com.example.ui.viewmodel.DeleteTarget
 import com.example.ui.viewmodel.SchoolViewModel
 import com.example.util.UrduLocalization
 import java.text.SimpleDateFormat
@@ -77,20 +88,24 @@ fun PublicAnnouncementsScreen(
 
     val categories = listOf("ALL", "Academic", "Exams", "Faculty", "Admission", "Sports", "General")
 
+    val designConfig = LocalAppDesignConfig.current
+    val isCompactLayout = designConfig.announcementsLayout == "COMPACT"
+
     val filteredList = announcements.filter { ann ->
+        val matchesVisibility = isAdmin || ann.isPublished
         val matchesCategory = if (selectedCategory == "ALL") true else ann.category.equals(selectedCategory, ignoreCase = true)
         val matchesSearch = searchQuery.isBlank() ||
                 ann.title.contains(searchQuery, ignoreCase = true) ||
                 ann.content.contains(searchQuery, ignoreCase = true) ||
                 ann.author.contains(searchQuery, ignoreCase = true)
-        matchesCategory && matchesSearch
+        matchesVisibility && matchesCategory && matchesSearch
     }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(contentPadding)
-            .background(Color(0xFFF8FAFC))
+            .background(MaterialTheme.colorScheme.background)
             .testTag("public_announcements_screen")
     ) {
         // Header
@@ -121,9 +136,12 @@ fun PublicAnnouncementsScreen(
 
                     if (isAdmin) {
                         Button(
-                            onClick = { viewModel.showBroadcastAnnouncementDialog.value = true },
-                            colors = ButtonDefaults.buttonColors(containerColor = RoyalBlue),
-                            shape = RoundedCornerShape(8.dp),
+                            onClick = {
+                                viewModel.editingAnnouncement.value = null
+                                viewModel.showBroadcastAnnouncementDialog.value = true
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                            shape = designButtonShape(designConfig),
                             modifier = Modifier.testTag("admin_broadcast_notice_btn")
                         ) {
                             Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -187,7 +205,15 @@ fun PublicAnnouncementsScreen(
                 items(filteredList, key = { it.id }) { ann ->
                     AnnouncementCard(
                         announcement = ann,
-                        onClick = { viewModel.selectedAnnouncementForDetails.value = ann }
+                        isAdmin = isAdmin,
+                        isCompact = isCompactLayout,
+                        onClick = { viewModel.selectedAnnouncementForDetails.value = ann },
+                        onEdit = {
+                            viewModel.editingAnnouncement.value = ann
+                            viewModel.showBroadcastAnnouncementDialog.value = true
+                        },
+                        onTogglePublish = { viewModel.toggleAnnouncementPublish(ann) },
+                        onDelete = { viewModel.requestDelete(DeleteTarget.Announcement(ann)) }
                     )
                 }
                 item {
@@ -201,18 +227,25 @@ fun PublicAnnouncementsScreen(
 @Composable
 private fun AnnouncementCard(
     announcement: CollegeAnnouncement,
-    onClick: () -> Unit
+    isAdmin: Boolean,
+    isCompact: Boolean,
+    onClick: () -> Unit,
+    onEdit: () -> Unit,
+    onTogglePublish: () -> Unit,
+    onDelete: () -> Unit
 ) {
+    val designConfig = LocalAppDesignConfig.current
     Card(
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        shape = designCardShape(designConfig),
+        colors = designCardColors(designConfig),
+        border = designCardBorder(designConfig),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (designConfig.cardStyle == "ELEVATED") 2.dp else 0.dp),
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
             .testTag("notice_card_${announcement.id}")
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(if (isCompact) 12.dp else 16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -271,14 +304,16 @@ private fun AnnouncementCard(
                 color = DeepNavy
             )
 
-            Spacer(modifier = Modifier.height(6.dp))
+            if (!isCompact) {
+                Spacer(modifier = Modifier.height(6.dp))
 
-            Text(
-                text = announcement.content,
-                style = MaterialTheme.typography.bodySmall,
-                color = Color(0xFF475569),
-                maxLines = 3
-            )
+                Text(
+                    text = announcement.content,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF475569),
+                    maxLines = 3
+                )
+            }
 
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -287,19 +322,48 @@ private fun AnnouncementCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "By ${announcement.author}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFF64748B),
-                    fontWeight = FontWeight.SemiBold
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "By ${announcement.author}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF64748B),
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    if (isAdmin && !announcement.isPublished) {
+                        Text(
+                            text = "DRAFT • Hidden from students",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFDC2626)
+                        )
+                    }
+                }
 
-                Text(
-                    text = "Tap to read full circular →",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = RoyalBlue,
-                    fontWeight = FontWeight.Bold
-                )
+                if (isAdmin) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                        IconButton(onClick = onEdit, modifier = Modifier.size(34.dp).testTag("edit_notice_${announcement.id}")) {
+                            Icon(Icons.Default.Edit, contentDescription = "Edit Notice", tint = RoyalBlue, modifier = Modifier.size(17.dp))
+                        }
+                        IconButton(onClick = onTogglePublish, modifier = Modifier.size(34.dp)) {
+                            Icon(
+                                imageVector = if (announcement.isPublished) Icons.Default.Public else Icons.Default.PublicOff,
+                                contentDescription = "Toggle Publish",
+                                tint = if (announcement.isPublished) Color(0xFF059669) else Color(0xFFDC2626),
+                                modifier = Modifier.size(17.dp)
+                            )
+                        }
+                        IconButton(onClick = onDelete, modifier = Modifier.size(34.dp).testTag("delete_notice_${announcement.id}")) {
+                            Icon(Icons.Default.Delete, contentDescription = "Delete Notice", tint = Color(0xFFEF4444), modifier = Modifier.size(17.dp))
+                        }
+                    }
+                } else {
+                    Text(
+                        text = "Tap to read full circular →",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = RoyalBlue,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
     }

@@ -1,17 +1,25 @@
 package com.example.ui.screens
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
@@ -28,7 +36,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,14 +46,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import com.example.data.model.StudentProfileRecord
 import com.example.ui.theme.DeepNavy
 import com.example.ui.theme.RoyalBlue
 import com.example.ui.viewmodel.SchoolViewModel
+import com.example.util.MediaStorageHelper
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -52,17 +66,28 @@ fun AddStudentDialog(
     existingStudent: StudentProfileRecord? = null,
     onDismiss: () -> Unit
 ) {
-    var fullName by remember { mutableStateOf(existingStudent?.fullName ?: "") }
-    var fatherName by remember { mutableStateOf(existingStudent?.fatherName ?: "") }
-    var rollNumber by remember { mutableStateOf(existingStudent?.rollNumber ?: "BHSS-2026-${(110..999).random()}") }
-    var classLevel by remember { mutableStateOf(existingStudent?.classLevel ?: "12th") }
-    var section by remember { mutableStateOf(existingStudent?.section ?: "A") }
-    var dateOfBirth by remember { mutableStateOf(existingStudent?.dateOfBirth ?: "2008-04-15") }
-    var admissionDate by remember { mutableStateOf(existingStudent?.admissionDate ?: "2024-03-01") }
-    var contactPhone by remember { mutableStateOf(existingStudent?.contactPhone ?: "+92 344 ") }
-    var address by remember { mutableStateOf(existingStudent?.address ?: "Tolti, District Kharmang") }
-    var bloodGroup by remember { mutableStateOf(existingStudent?.bloodGroup ?: "O+") }
-    var notes by remember { mutableStateOf(existingStudent?.notes ?: "Enrolled in good standing.") }
+    val context = LocalContext.current
+    var fullName by remember(existingStudent?.id) { mutableStateOf(existingStudent?.fullName ?: "") }
+    var fatherName by remember(existingStudent?.id) { mutableStateOf(existingStudent?.fatherName ?: "") }
+    var rollNumber by remember(existingStudent?.id) { mutableStateOf(existingStudent?.rollNumber ?: "BHSS-2026-${(110..999).random()}") }
+    var classLevel by remember(existingStudent?.id) { mutableStateOf(existingStudent?.classLevel ?: "12th") }
+    var section by remember(existingStudent?.id) { mutableStateOf(existingStudent?.section ?: "A") }
+    var dateOfBirth by remember(existingStudent?.id) { mutableStateOf(existingStudent?.dateOfBirth ?: "2008-04-15") }
+    var admissionDate by remember(existingStudent?.id) { mutableStateOf(existingStudent?.admissionDate ?: "2024-03-01") }
+    var contactPhone by remember(existingStudent?.id) { mutableStateOf(existingStudent?.contactPhone ?: "+92 344 ") }
+    var address by remember(existingStudent?.id) { mutableStateOf(existingStudent?.address ?: "Tolti, District Kharmang") }
+    var bloodGroup by remember(existingStudent?.id) { mutableStateOf(existingStudent?.bloodGroup ?: "O+") }
+    var notes by remember(existingStudent?.id) { mutableStateOf(existingStudent?.notes ?: "Enrolled in good standing.") }
+    var photoUri by remember(existingStudent?.id) { mutableStateOf(existingStudent?.photoUri) }
+
+    val photoPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            val saved = MediaStorageHelper.copyPickerUriToInternalStorage(context, uri, "student")
+            if (saved != null) photoUri = saved
+        }
+    }
 
     var classExpanded by remember { mutableStateOf(false) }
     val classList = listOf("5th", "6th", "7th", "8th", "9th", "10th", "11th", "12th")
@@ -89,6 +114,49 @@ fun AddStudentDialog(
                     .padding(vertical = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                // Optional Student Avatar Picker
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = RoyalBlue.copy(alpha = 0.12f),
+                        modifier = Modifier.size(56.dp)
+                    ) {
+                        if (!photoUri.isNullOrBlank()) {
+                            AsyncImage(
+                                model = photoUri,
+                                contentDescription = "Student Avatar",
+                                modifier = Modifier.fillMaxSize().clip(CircleShape),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.Person, contentDescription = null, tint = RoyalBlue, modifier = Modifier.size(28.dp))
+                            }
+                        }
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        OutlinedButton(
+                            onClick = {
+                                photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                            },
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(Icons.Default.AddAPhoto, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(if (photoUri == null) "Add Photo" else "Change Photo", style = MaterialTheme.typography.labelMedium)
+                        }
+                        if (!photoUri.isNullOrBlank()) {
+                            TextButton(onClick = { photoUri = null }) {
+                                Text("Remove Photo", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
+                }
+
                 OutlinedTextField(
                     value = fullName,
                     onValueChange = { fullName = it },
@@ -222,7 +290,8 @@ fun AddStudentDialog(
                             contactPhone = contactPhone.trim(),
                             address = address.trim(),
                             bloodGroup = bloodGroup.trim(),
-                            notes = notes.trim()
+                            notes = notes.trim(),
+                            photoUri = photoUri
                         )
                     } else {
                         viewModel.updateStudent(
@@ -237,7 +306,8 @@ fun AddStudentDialog(
                                 contactPhone = contactPhone.trim(),
                                 address = address.trim(),
                                 bloodGroup = bloodGroup.trim(),
-                                notes = notes.trim()
+                                notes = notes.trim(),
+                                photoUri = photoUri
                             )
                         )
                     }

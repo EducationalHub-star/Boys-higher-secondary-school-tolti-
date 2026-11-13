@@ -1,6 +1,5 @@
 package com.example.ui.screens
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,11 +21,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
-import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.RateReview
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -35,23 +36,35 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.example.data.model.TeacherProfileRecord
+import com.example.ui.theme.LocalAppDesignConfig
+import com.example.ui.theme.designButtonShape
+import com.example.ui.theme.designCardBorder
+import com.example.ui.theme.designCardColors
+import com.example.ui.theme.designCardShape
+import com.example.ui.viewmodel.DeleteTarget
 import com.example.ui.viewmodel.SchoolViewModel
+import com.example.util.MediaStorageHelper
 import com.example.util.UrduLocalization
+import java.util.Locale
 
 @Composable
 fun PublicTeachersScreen(
@@ -61,6 +74,7 @@ fun PublicTeachersScreen(
     val language by viewModel.currentLanguage.collectAsState()
     val isUrdu = language == UrduLocalization.Language.URDU
     val teachers by viewModel.allTeachers.collectAsState()
+    val allRatings by viewModel.allTeacherRatings.collectAsState()
     val selectedDept by viewModel.teacherDeptFilter.collectAsState()
     val searchQuery by viewModel.teacherSearchQuery.collectAsState()
     val isAdmin by viewModel.isAdminLoggedIn.collectAsState()
@@ -87,6 +101,10 @@ fun PublicTeachersScreen(
         matchesDept && matchesQuery
     }
 
+    val ratingsByTeacher = remember(allRatings) {
+        allRatings.filter { it.isApproved }.groupBy { it.teacherId }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier
@@ -107,12 +125,12 @@ fun PublicTeachersScreen(
                         text = if (isUrdu) "اساتذہ کرام کی ڈائریکٹری" else "Distinguished Faculty Directory",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF0B192C)
+                        color = MaterialTheme.colorScheme.onBackground
                     )
                     Text(
-                        text = if (isUrdu) "بوائز ہائر سیکنڈری اسکول تولتی کے قابل ترین اساتذہ" else "Dedicated teachers and subject specialists of BHSS Tolti",
+                        text = if (isUrdu) "بوائز ہائر سیکنڈری اسکول تولتی کے قابل ترین اساتذہ" else "Dedicated teachers and subject specialists of BHSS Tolti — tap Rate & Reviews to give feedback",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF64748B)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -152,8 +170,8 @@ fun PublicTeachersScreen(
                             onClick = { viewModel.teacherDeptFilter.value = dept },
                             label = { Text(label, fontSize = 11.sp) },
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = Color(0xFF0B192C),
-                                selectedLabelColor = Color.White
+                                selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimary
                             )
                         )
                     }
@@ -162,23 +180,39 @@ fun PublicTeachersScreen(
 
             // Faculty Cards List
             items(filtered, key = { it.id }) { teacher ->
+                val tRatings = ratingsByTeacher[teacher.id].orEmpty()
+                val avg = if (tRatings.isNotEmpty()) tRatings.map { it.rating }.average() else 0.0
+
                 TeacherCardItem(
                     teacher = teacher,
+                    averageRating = avg,
+                    reviewCount = tRatings.size,
                     isAdmin = isAdmin,
-                    onDelete = { viewModel.deleteTeacher(teacher) }
+                    onRateClick = {
+                        viewModel.teacherForRating.value = teacher
+                        viewModel.showRateTeacherDialog.value = true
+                    },
+                    onEdit = {
+                        viewModel.editingTeacher.value = teacher
+                        viewModel.showAddTeacherDialog.value = true
+                    },
+                    onDelete = { viewModel.requestDelete(DeleteTarget.Teacher(teacher)) }
                 )
             }
         }
 
         if (isAdmin) {
             FloatingActionButton(
-                onClick = { viewModel.showAddTeacherDialog.value = true },
+                onClick = {
+                    viewModel.editingTeacher.value = null
+                    viewModel.showAddTeacherDialog.value = true
+                },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(contentPadding)
                     .padding(16.dp)
                     .testTag("admin_add_teacher_fab"),
-                containerColor = Color(0xFF0B192C),
+                containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = Color(0xFFFBBF24)
             ) {
                 Icon(imageVector = Icons.Default.Add, contentDescription = "Add Teacher")
@@ -190,34 +224,53 @@ fun PublicTeachersScreen(
 @Composable
 private fun TeacherCardItem(
     teacher: TeacherProfileRecord,
+    averageRating: Double,
+    reviewCount: Int,
     isAdmin: Boolean,
+    onRateClick: () -> Unit,
+    onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val designConfig = LocalAppDesignConfig.current
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("teacher_card_${teacher.id}"),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        shape = designCardShape(designConfig),
+        colors = designCardColors(designConfig),
+        border = designCardBorder(designConfig),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (designConfig.cardStyle == "OUTLINED") 0.dp else 2.dp)
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                val resolvedPhoto = remember(teacher.photoUri) {
+                    MediaStorageHelper.resolvePhotoModel(teacher.photoUri)
+                }
                 Surface(
                     shape = CircleShape,
-                    color = Color(0xFF1D4ED8).copy(alpha = 0.12f),
-                    modifier = Modifier.size(48.dp)
+                    color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f),
+                    modifier = Modifier.size(52.dp)
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Default.Person,
-                            contentDescription = null,
-                            tint = Color(0xFF1D4ED8),
-                            modifier = Modifier.size(28.dp)
+                    if (resolvedPhoto != null) {
+                        AsyncImage(
+                            model = resolvedPhoto,
+                            contentDescription = teacher.name,
+                            modifier = Modifier.fillMaxSize().clip(CircleShape),
+                            contentScale = ContentScale.Crop
                         )
+                    } else {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = teacher.name,
+                                tint = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
                     }
                 }
 
@@ -228,25 +281,41 @@ private fun TeacherCardItem(
                         text = teacher.name,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF0B192C)
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
                         text = teacher.designation,
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFFD97706),
+                        color = MaterialTheme.colorScheme.tertiary,
                         fontWeight = FontWeight.Bold
                     )
-                    Text(
-                        text = "${teacher.qualification} • Joined ${teacher.joiningYear}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFF64748B),
-                        fontSize = 10.sp
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "${teacher.qualification} • Joined ${teacher.joiningYear}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 10.sp
+                        )
+                    }
                 }
 
-                if (isAdmin) {
-                    IconButton(onClick = onDelete) {
-                        Icon(imageVector = Icons.Default.Delete, contentDescription = "Delete", tint = Color(0xFF94A3B8), modifier = Modifier.size(18.dp))
+                // Average Star Rating Badge
+                Surface(
+                    color = Color(0xFFFEF3C7),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFFD97706), modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text(
+                            text = if (reviewCount > 0) "${String.format(Locale.US, "%.1f", averageRating)} ($reviewCount)" else "New",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF92400E)
+                        )
                     }
                 }
             }
@@ -255,17 +324,17 @@ private fun TeacherCardItem(
 
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                color = Color(0xFFF8FAFC),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
                 shape = RoundedCornerShape(8.dp)
             ) {
                 Column(modifier = Modifier.padding(10.dp)) {
                     Row {
-                        Text("Subjects: ", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0B192C))
-                        Text(teacher.assignedSubjects, fontSize = 11.sp, color = Color(0xFF334155))
+                        Text("Subjects: ", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                        Text(teacher.assignedSubjects, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Row(modifier = Modifier.padding(top = 2.dp)) {
-                        Text("Classes: ", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0B192C))
-                        Text(teacher.assignedClasses, fontSize = 11.sp, color = Color(0xFF334155))
+                        Text("Classes: ", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                        Text(teacher.assignedClasses, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -275,7 +344,7 @@ private fun TeacherCardItem(
             Text(
                 text = teacher.introduction,
                 style = MaterialTheme.typography.bodySmall,
-                color = Color(0xFF475569),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 lineHeight = 18.sp
             )
 
@@ -287,16 +356,52 @@ private fun TeacherCardItem(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(imageVector = Icons.Default.Email, contentDescription = null, tint = Color(0xFF64748B), modifier = Modifier.size(14.dp))
+                    Icon(imageVector = Icons.Default.Email, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text(teacher.email, fontSize = 10.sp, color = Color(0xFF64748B))
+                    Text(teacher.email, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(imageVector = Icons.Default.Phone, contentDescription = null, tint = Color(0xFF64748B), modifier = Modifier.size(14.dp))
+                    Icon(imageVector = Icons.Default.Phone, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text(teacher.phone, fontSize = 10.sp, color = Color(0xFF64748B))
+                    Text(teacher.phone, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedButton(
+                    onClick = onRateClick,
+                    shape = designButtonShape(designConfig),
+                    modifier = Modifier.height(48.dp).testTag("rate_teacher_btn_${teacher.id}")
+                ) {
+                    Icon(Icons.Default.RateReview, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Rate & Reviews ($reviewCount)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
+
+                if (isAdmin) {
+                    Row {
+                        IconButton(
+                            onClick = onEdit,
+                            modifier = Modifier.size(48.dp).testTag("edit_teacher_btn_${teacher.id}")
+                        ) {
+                            Icon(imageVector = Icons.Default.Edit, contentDescription = "Edit Teacher", tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(18.dp))
+                        }
+                        IconButton(
+                            onClick = onDelete,
+                            modifier = Modifier.size(48.dp).testTag("delete_teacher_btn_${teacher.id}")
+                        ) {
+                            Icon(imageVector = Icons.Default.Delete, contentDescription = "Delete Teacher", tint = Color(0xFFDC2626), modifier = Modifier.size(18.dp))
+                        }
+                    }
                 }
             }
         }
     }
 }
+

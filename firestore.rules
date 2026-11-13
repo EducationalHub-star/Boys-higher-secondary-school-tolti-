@@ -1,27 +1,205 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function isAuthenticated() {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
       return request.auth != null;
     }
 
     function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN';
+    }
+
+    function isValidUserProfile(data) {
+      return data.userId is string && data.userId.size() <= 128 &&
+        data.email is string && data.email.size() <= 200 &&
+        data.role in ['ADMIN', 'STUDENT'] &&
+        (!('displayName' in data) || data.displayName == null || (data.displayName is string && data.displayName.size() <= 120));
+    }
+
+    function isValidAnnouncement(data) {
+      return data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
+        data.content is string && data.content.size() > 0 && data.content.size() <= 4000 &&
+        data.author is string && data.author.size() > 0 && data.author.size() <= 120 &&
+        data.isPublished is bool &&
+        (!('category' in data) || (data.category is string && data.category.size() <= 80)) &&
+        (!('targetAudience' in data) || (data.targetAudience is string && data.targetAudience.size() <= 80)) &&
+        (!('isUrgent' in data) || data.isUrgent is bool) &&
+        (!('isPinned' in data) || data.isPinned is bool) &&
+        (!('updatedAt' in data) || (data.updatedAt is timestamp && data.updatedAt <= request.time));
+    }
+
+    function isValidStudentResult(data) {
+      return data.studentName is string && data.studentName.size() > 0 && data.studentName.size() <= 120 &&
+        data.rollNumber is string && data.rollNumber.size() > 0 && data.rollNumber.size() <= 60 &&
+        data.classLevel is string && data.classLevel.size() > 0 && data.classLevel.size() <= 20 &&
+        data.examTerm is string && data.examTerm.size() > 0 && data.examTerm.size() <= 80 &&
+        data.totalMarks is int && data.totalMarks > 0 && data.totalMarks <= 2000 &&
+        data.obtainedMarks is int && data.obtainedMarks >= 0 && data.obtainedMarks <= data.totalMarks &&
+        data.grade is string && data.grade.size() <= 10 &&
+        data.status is string && data.status.size() <= 20 &&
+        data.isPublished is bool &&
+        (!('subjectName' in data) || (data.subjectName is string && data.subjectName.size() <= 100)) &&
+        (!('subjectCode' in data) || (data.subjectCode is string && data.subjectCode.size() <= 40)) &&
+        (!('updatedAt' in data) || (data.updatedAt is timestamp && data.updatedAt <= request.time));
+    }
+
+    function isValidDesignConfig(data) {
+      return data.themeMode in ['SCHOOL_CUSTOM', 'LIGHT', 'DARK'] &&
+        data.primaryColorHex is string && data.primaryColorHex.size() <= 16 &&
+        data.secondaryColorHex is string && data.secondaryColorHex.size() <= 16 &&
+        data.accentColorHex is string && data.accentColorHex.size() <= 16 &&
+        data.buttonStyle in ['ROUNDED', 'PILL', 'SHARP'] &&
+        data.cardStyle in ['ELEVATED', 'OUTLINED', 'GLASS'] &&
+        (!('backgroundColorHex' in data) || (data.backgroundColorHex is string && data.backgroundColorHex.size() <= 16)) &&
+        (!('fontSizeScale' in data) || (data.fontSizeScale is number && data.fontSizeScale >= 0.8 && data.fontSizeScale <= 1.3)) &&
+        (!('iconNavStyle' in data) || data.iconNavStyle in ['DEFAULT', 'COMPACT', 'PILL']) &&
+        (!('homeSectionOrder' in data) || (data.homeSectionOrder is string && data.homeSectionOrder.size() <= 300)) &&
+        (!('hiddenHomeSections' in data) || (data.hiddenHomeSections is string && data.hiddenHomeSections.size() <= 300)) &&
+        (!('announcementsLayout' in data) || (data.announcementsLayout is string && data.announcementsLayout.size() <= 30)) &&
+        (!('resultsLayout' in data) || (data.resultsLayout is string && data.resultsLayout.size() <= 30)) &&
+        (!('adminDashboardLayout' in data) || (data.adminDashboardLayout is string && data.adminDashboardLayout.size() <= 30)) &&
+        (!('updatedAt' in data) || (data.updatedAt is timestamp && data.updatedAt <= request.time));
+    }
+
+    function isValidTeacherRating(data) {
+      return data.authorUid is string && data.authorUid.size() <= 128 &&
+        data.teacherId is string && data.teacherId.size() > 0 && data.teacherId.size() <= 128 &&
+        data.teacherName is string && data.teacherName.size() > 0 && data.teacherName.size() <= 120 &&
+        data.studentRollNumber is string && data.studentRollNumber.size() > 0 && data.studentRollNumber.size() <= 60 &&
+        data.rating is int && data.rating >= 1 && data.rating <= 5 &&
+        data.isApproved is bool &&
+        (!('studentName' in data) || (data.studentName is string && data.studentName.size() <= 120)) &&
+        (!('feedback' in data) || (data.feedback is string && data.feedback.size() <= 1000)) &&
+        (!('subjectName' in data) || (data.subjectName is string && data.subjectName.size() <= 100)) &&
+        (!('updatedAt' in data) || (data.updatedAt is timestamp && data.updatedAt <= request.time));
+    }
+
+    function isValidGalleryPhoto(data) {
+      return data.title is string && data.title.size() > 0 && data.title.size() <= 160 &&
+        data.category is string && data.category.size() > 0 && data.category.size() <= 80 &&
+        data.isPublished is bool &&
+        (!('description' in data) || (data.description is string && data.description.size() <= 600)) &&
+        (!('drawableResName' in data) || (data.drawableResName is string && data.drawableResName.size() <= 80)) &&
+        (!('updatedAt' in data) || (data.updatedAt is timestamp && data.updatedAt <= request.time));
+    }
+
+    function isValidTeacherProfile(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 120 &&
+        data.designation is string && data.designation.size() > 0 && data.designation.size() <= 120 &&
+        data.department is string && data.department.size() > 0 && data.department.size() <= 100 &&
+        (!('qualification' in data) || (data.qualification is string && data.qualification.size() <= 120)) &&
+        (!('assignedSubjects' in data) || (data.assignedSubjects is string && data.assignedSubjects.size() <= 300)) &&
+        (!('assignedClasses' in data) || (data.assignedClasses is string && data.assignedClasses.size() <= 100)) &&
+        (!('updatedAt' in data) || (data.updatedAt is timestamp && data.updatedAt <= request.time));
+    }
+
+    function isValidStudentProfile(data) {
+      return data.fullName is string && data.fullName.size() > 0 && data.fullName.size() <= 120 &&
+        data.fatherName is string && data.fatherName.size() > 0 && data.fatherName.size() <= 120 &&
+        data.rollNumber is string && data.rollNumber.size() > 0 && data.rollNumber.size() <= 60 &&
+        data.classLevel is string && data.classLevel.size() > 0 && data.classLevel.size() <= 20 &&
+        (!('section' in data) || (data.section is string && data.section.size() <= 20)) &&
+        (!('status' in data) || (data.status is string && data.status.size() <= 30)) &&
+        (!('updatedAt' in data) || (data.updatedAt is timestamp && data.updatedAt <= request.time));
     }
 
     match /users/{userId} {
-      allow read: if isAuthenticated();
-      allow write: if isOwner(userId);
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isValidId(userId) && isOwner(userId) &&
+        isValidUserProfile(incoming()) &&
+        incoming().userId == request.auth.uid &&
+        incoming().role == 'STUDENT';
+      allow update: if isValidId(userId) &&
+        isValidUserProfile(incoming()) && (
+          isAdmin() ||
+          (isOwner(userId) &&
+            incoming().userId == existing().userId &&
+            incoming().role == existing().role &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'email']))
+        );
+      allow delete: if isValidId(userId) && isAdmin();
     }
 
     match /announcements/{announcementId} {
-      allow read: if true;
-      allow write: if isAuthenticated();
+      allow get: if isValidId(announcementId) && (existing().isPublished == true || isAdmin());
+      allow list: if resource.data.isPublished == true || isAdmin();
+      allow create, update: if isValidId(announcementId) && isAdmin() && isValidAnnouncement(incoming());
+      allow delete: if isValidId(announcementId) && isAdmin();
     }
 
     match /student_results/{resultId} {
-      allow read: if true;
-      allow write: if isAuthenticated();
+      allow get: if isValidId(resultId) && (existing().isPublished == true || isAdmin());
+      allow list: if resource.data.isPublished == true || isAdmin();
+      allow create, update: if isValidId(resultId) && isAdmin() && isValidStudentResult(incoming());
+      allow delete: if isValidId(resultId) && isAdmin();
+    }
+
+    match /design_config/{configId} {
+      allow get: if isValidId(configId) && (configId == 'published' || isAdmin());
+      allow list: if isAdmin();
+      allow create, update: if isValidId(configId) && isAdmin() && isValidDesignConfig(incoming());
+      allow delete: if isValidId(configId) && isAdmin();
+    }
+
+    match /teacher_ratings/{ratingId} {
+      allow get: if isValidId(ratingId) && (existing().isApproved == true || isAdmin());
+      allow list: if resource.data.isApproved == true || isAdmin();
+      allow create: if isValidId(ratingId) && isSignedIn() &&
+        isValidTeacherRating(incoming()) &&
+        incoming().authorUid == request.auth.uid &&
+        incoming().isApproved == true;
+      allow update: if isValidId(ratingId) &&
+        isValidTeacherRating(incoming()) && (
+          isAdmin() ||
+          (isSignedIn() &&
+            existing().authorUid == request.auth.uid &&
+            incoming().authorUid == existing().authorUid &&
+            incoming().isApproved == existing().isApproved)
+        );
+      allow delete: if isValidId(ratingId) && isAdmin();
+    }
+
+    match /gallery_photos/{photoId} {
+      allow get: if isValidId(photoId) && (existing().isPublished == true || isAdmin());
+      allow list: if resource.data.isPublished == true || isAdmin();
+      allow create, update: if isValidId(photoId) && isAdmin() && isValidGalleryPhoto(incoming());
+      allow delete: if isValidId(photoId) && isAdmin();
+    }
+
+    match /teachers/{teacherId} {
+      allow get: if isValidId(teacherId);
+      allow list: if true;
+      allow create, update: if isValidId(teacherId) && isAdmin() && isValidTeacherProfile(incoming());
+      allow delete: if isValidId(teacherId) && isAdmin();
+    }
+
+    match /students/{studentId} {
+      allow get, list: if isAdmin();
+      allow create, update: if isValidId(studentId) && isAdmin() && isValidStudentProfile(incoming());
+      allow delete: if isValidId(studentId) && isAdmin();
     }
   }
 }

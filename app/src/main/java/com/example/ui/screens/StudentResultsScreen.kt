@@ -35,10 +35,12 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Grade
 import androidx.compose.material.icons.filled.MilitaryTech
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.PublicOff
@@ -61,6 +63,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -73,6 +76,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -81,14 +85,21 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import coil.compose.AsyncImage
 import com.example.R
 import com.example.data.model.StudentResults
 import com.example.data.model.SubjectScoreItem
 import com.example.ui.theme.DeepNavy
 import com.example.ui.theme.ElegantGold
+import com.example.ui.theme.LocalAppDesignConfig
 import com.example.ui.theme.RoyalBlue
 import com.example.ui.theme.StatusFailRed
 import com.example.ui.theme.StatusPassGreen
+import com.example.ui.theme.designButtonShape
+import com.example.ui.theme.designCardBorder
+import com.example.ui.theme.designCardColors
+import com.example.ui.theme.designCardShape
+import com.example.ui.viewmodel.DeleteTarget
 import com.example.ui.viewmodel.SchoolViewModel
 import com.example.util.UrduLocalization
 
@@ -108,6 +119,9 @@ fun StudentResultsScreen(
     val isAdmin by viewModel.isAdminLoggedIn.collectAsState()
     val selectedCard by viewModel.selectedSubjectResultCard.collectAsState()
     val showAddDialog by viewModel.showAddSubjectResultDialog.collectAsState()
+    val editingResult by viewModel.editingSubjectResult.collectAsState()
+    val designConfig = LocalAppDesignConfig.current
+    val isCompactLayout = designConfig.resultsLayout == "COMPACT"
 
     // Aggregate stats calculation
     val totalCount = subjectResults.size
@@ -240,7 +254,63 @@ fun StudentResultsScreen(
                 }
             }
 
-            // 4. Results List
+            // 4. Class-wise Quick Student Marksheet Selector
+            if (subjectResults.isNotEmpty()) {
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = if (isUrdu) "طلباء کی فوری مارک شیٹ کھولیں (${if (selectedClass == "ALL") "تمام" else "کلاس $selectedClass"}):"
+                            else "Students in ${if (selectedClass == "ALL") "Classes 8th–12th" else "Class $selectedClass"} — Tap to Open Marksheet:",
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = DeepNavy
+                        )
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.testTag("class_students_marksheet_selector")
+                        ) {
+                            items(subjectResults, key = { "pill_${it.id}" }) { res ->
+                                Surface(
+                                    onClick = { viewModel.selectedSubjectResultCard.value = res },
+                                    shape = designButtonShape(designConfig),
+                                    color = MaterialTheme.colorScheme.surface,
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.35f)),
+                                    shadowElevation = 1.dp,
+                                    modifier = Modifier.testTag("quick_marksheet_${res.rollNumber}")
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Person,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.secondary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Column {
+                                            Text(
+                                                text = res.studentName,
+                                                fontSize = 11.5.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Text(
+                                                text = "${res.classLevel} • ${res.rollNumber} (${res.grade})",
+                                                fontSize = 9.5.sp,
+                                                color = Color(0xFF64748B)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 5. Results List
             if (subjectResults.isEmpty()) {
                 item {
                     EmptyResultsCard(isUrdu = isUrdu, onReset = {
@@ -254,9 +324,14 @@ fun StudentResultsScreen(
                         result = result,
                         isAdmin = isAdmin,
                         isUrdu = isUrdu,
+                        isCompact = isCompactLayout,
                         onViewOfficialMarksheet = { viewModel.selectedSubjectResultCard.value = result },
+                        onEdit = {
+                            viewModel.editingSubjectResult.value = result
+                            viewModel.showAddSubjectResultDialog.value = true
+                        },
                         onTogglePublish = { viewModel.toggleSubjectResultPublish(result) },
-                        onDelete = { viewModel.deleteStudentSubjectResults(result) }
+                        onDelete = { viewModel.requestDelete(DeleteTarget.SubjectResult(result)) }
                     )
                 }
             }
@@ -265,13 +340,16 @@ fun StudentResultsScreen(
         // Admin quick entry FAB for subject marksheet
         if (isAdmin) {
             FloatingActionButton(
-                onClick = { viewModel.showAddSubjectResultDialog.value = true },
+                onClick = {
+                    viewModel.editingSubjectResult.value = null
+                    viewModel.showAddSubjectResultDialog.value = true
+                },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(contentPadding)
                     .padding(16.dp)
                     .testTag("admin_add_subject_results_fab"),
-                containerColor = DeepNavy,
+                containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = ElegantGold
             ) {
                 Icon(imageVector = Icons.Default.Add, contentDescription = "Add Marksheet")
@@ -291,13 +369,23 @@ fun StudentResultsScreen(
         )
     }
 
-    // Admin Add Marksheet Dialog
+    // Admin Add / Edit Marksheet Dialog
     if (showAddDialog) {
         AddStudentResultsDialog(
             isUrdu = isUrdu,
-            onDismiss = { viewModel.showAddSubjectResultDialog.value = false },
-            onSave = { newResult ->
-                viewModel.insertStudentSubjectResults(newResult)
+            existingResults = editingResult,
+            onDismiss = {
+                viewModel.editingSubjectResult.value = null
+                viewModel.showAddSubjectResultDialog.value = false
+            },
+            onSave = { savedResult ->
+                if (editingResult != null) {
+                    viewModel.updateStudentSubjectResults(savedResult)
+                    viewModel.editingSubjectResult.value = null
+                    viewModel.showAddSubjectResultDialog.value = false
+                } else {
+                    viewModel.insertStudentSubjectResults(savedResult)
+                }
             }
         )
     }
@@ -519,19 +607,23 @@ private fun StudentSubjectResultCard(
     result: StudentResults,
     isAdmin: Boolean,
     isUrdu: Boolean,
+    isCompact: Boolean = false,
     onViewOfficialMarksheet: () -> Unit,
+    onEdit: () -> Unit,
     onTogglePublish: () -> Unit,
     onDelete: () -> Unit
 ) {
     var isExpanded by remember { mutableStateOf(false) }
+    val designConfig = LocalAppDesignConfig.current
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("student_subject_card_${result.rollNumber}"),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        shape = designCardShape(designConfig),
+        colors = designCardColors(designConfig),
+        border = designCardBorder(designConfig),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (designConfig.cardStyle == "ELEVATED") 2.dp else 0.dp)
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             // Header Row: Student Identity & Grade Badge
@@ -652,22 +744,24 @@ private fun StudentSubjectResultCard(
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(6.dp))
+                    if (!isCompact) {
+                        Spacer(modifier = Modifier.height(6.dp))
 
-                    LinearProgressIndicator(
-                        progress = { (result.percentage / 100f).toFloat().coerceIn(0f, 1f) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(6.dp)
-                            .clip(RoundedCornerShape(3.dp)),
-                        color = when {
-                            result.percentage >= 80 -> StatusPassGreen
-                            result.percentage >= 60 -> RoyalBlue
-                            result.percentage >= 40 -> ElegantGold
-                            else -> StatusFailRed
-                        },
-                        trackColor = Color(0xFFE2E8F0)
-                    )
+                        LinearProgressIndicator(
+                            progress = { (result.percentage / 100f).toFloat().coerceIn(0f, 1f) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp)),
+                            color = when {
+                                result.percentage >= 80 -> StatusPassGreen
+                                result.percentage >= 60 -> RoyalBlue
+                                result.percentage >= 40 -> ElegantGold
+                                else -> StatusFailRed
+                            },
+                            trackColor = Color(0xFFE2E8F0)
+                        )
+                    }
                 }
             }
 
@@ -784,8 +878,20 @@ private fun StudentSubjectResultCard(
                     // Admin quick controls
                     if (isAdmin) {
                         IconButton(
+                            onClick = onEdit,
+                            modifier = Modifier.size(34.dp).testTag("edit_subject_result_${result.id}")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "Edit Marksheet",
+                                tint = RoyalBlue,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+
+                        IconButton(
                             onClick = onTogglePublish,
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.size(34.dp)
                         ) {
                             Icon(
                                 imageVector = if (result.isPublished) Icons.Default.Public else Icons.Default.PublicOff,
@@ -797,11 +903,11 @@ private fun StudentSubjectResultCard(
 
                         IconButton(
                             onClick = onDelete,
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.size(34.dp).testTag("delete_subject_result_${result.id}")
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Delete,
-                                contentDescription = "Delete",
+                                contentDescription = "Delete Marksheet",
                                 tint = StatusFailRed,
                                 modifier = Modifier.size(16.dp)
                             )
@@ -992,13 +1098,25 @@ fun OfficialSubjectMarksheetDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.school_logo),
-                        contentDescription = "School Logo",
-                        modifier = Modifier
-                            .size(68.dp)
-                            .clip(CircleShape)
-                    )
+                    val customLogoUri = LocalAppDesignConfig.current.customLogoUri
+                    if (!customLogoUri.isNullOrBlank()) {
+                        AsyncImage(
+                            model = customLogoUri,
+                            contentDescription = "School Logo",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(68.dp)
+                                .clip(CircleShape)
+                        )
+                    } else {
+                        Image(
+                            painter = painterResource(id = R.drawable.school_logo),
+                            contentDescription = "School Logo",
+                            modifier = Modifier
+                                .size(68.dp)
+                                .clip(CircleShape)
+                        )
+                    }
 
                     Spacer(modifier = Modifier.height(8.dp))
 
@@ -1204,29 +1322,35 @@ private fun MarksheetInfoField(label: String, value: String, modifier: Modifier 
 }
 
 /**
- * Admin Dialog to Add Subject-Wise Marksheet for Classes 8th through 12th.
+ * Admin Dialog to Add or Edit Subject-Wise Marksheet for Classes 8th through 12th.
  */
 @Composable
 fun AddStudentResultsDialog(
     isUrdu: Boolean,
+    existingResults: StudentResults? = null,
     onDismiss: () -> Unit,
     onSave: (StudentResults) -> Unit
 ) {
-    var studentName by remember { mutableStateOf("") }
-    var fatherName by remember { mutableStateOf("") }
-    var rollNumber by remember { mutableStateOf("") }
-    var selectedClass by remember { mutableStateOf("10th") }
-    var section by remember { mutableStateOf("A") }
-    var examName by remember { mutableStateOf("Annual Board Examination 2026") }
+    val isEditing = existingResults != null
+    var studentName by remember(existingResults?.id) { mutableStateOf(existingResults?.studentName ?: "") }
+    var fatherName by remember(existingResults?.id) { mutableStateOf(existingResults?.fatherName ?: "") }
+    var rollNumber by remember(existingResults?.id) { mutableStateOf(existingResults?.rollNumber ?: "") }
+    var selectedClass by remember(existingResults?.id) { mutableStateOf(existingResults?.classLevel ?: "10th") }
+    var section by remember(existingResults?.id) { mutableStateOf(existingResults?.section ?: "A") }
+    var examName by remember(existingResults?.id) { mutableStateOf(existingResults?.examTerm ?: "Annual Board Examination 2026") }
+    var boardName by remember(existingResults?.id) { mutableStateOf(existingResults?.boardName ?: "BISE / FBISE Gilgit-Baltistan") }
+    var remarks by remember(existingResults?.id) { mutableStateOf(existingResults?.remarks ?: "Annual Board Evaluation") }
+    var isPublished by remember(existingResults?.id) { mutableStateOf(existingResults?.isPublished ?: true) }
 
     // Marks inputs
-    var engMarks by remember { mutableStateOf("85") }
-    var urduMarks by remember { mutableStateOf("80") }
-    var mathMarks by remember { mutableStateOf("92") }
-    var sciMarks by remember { mutableStateOf("88") }
-    var socMarks by remember { mutableStateOf("84") }
-    var compMarks by remember { mutableStateOf("90") }
-    var islMarks by remember { mutableStateOf("45") }
+    var engMarks by remember(existingResults?.id) { mutableStateOf((existingResults?.englishObtained ?: 85).toString()) }
+    var urduMarks by remember(existingResults?.id) { mutableStateOf((existingResults?.urduObtained ?: 80).toString()) }
+    var mathMarks by remember(existingResults?.id) { mutableStateOf((existingResults?.mathObtained ?: 92).toString()) }
+    var sciMarks by remember(existingResults?.id) { mutableStateOf((existingResults?.scienceObtained ?: 88).toString()) }
+    var socMarks by remember(existingResults?.id) { mutableStateOf((existingResults?.chemistryOrSocialObtained ?: 84).toString()) }
+    var compMarks by remember(existingResults?.id) { mutableStateOf((existingResults?.electiveObtained ?: 90).toString()) }
+    var islMarks by remember(existingResults?.id) { mutableStateOf((existingResults?.islamicStudiesObtained ?: 45).toString()) }
+    var validationError by remember { mutableStateOf<String?>(null) }
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -1235,6 +1359,7 @@ fun AddStudentResultsDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 16.dp)
+                .testTag("add_edit_subject_marksheet_dialog")
         ) {
             Column(
                 modifier = Modifier
@@ -1244,7 +1369,7 @@ fun AddStudentResultsDialog(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
-                    text = "Add Student Marksheet (8th–12th)",
+                    text = if (isEditing) "Edit Student Marksheet (8th–12th)" else "Add Student Marksheet (8th–12th)",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = DeepNavy
@@ -1252,8 +1377,8 @@ fun AddStudentResultsDialog(
 
                 OutlinedTextField(
                     value = studentName,
-                    onValueChange = { studentName = it },
-                    label = { Text("Student Full Name") },
+                    onValueChange = { studentName = it; validationError = null },
+                    label = { Text("Student Full Name *") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
@@ -1269,8 +1394,8 @@ fun AddStudentResultsDialog(
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = rollNumber,
-                        onValueChange = { rollNumber = it },
-                        label = { Text("Roll Number") },
+                        onValueChange = { rollNumber = it; validationError = null },
+                        label = { Text("Roll Number *") },
                         modifier = Modifier.weight(1f),
                         singleLine = true
                     )
@@ -1284,10 +1409,18 @@ fun AddStudentResultsDialog(
                     )
                 }
 
+                OutlinedTextField(
+                    value = examName,
+                    onValueChange = { examName = it },
+                    label = { Text("Exam Term") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
                 // Class selector specifically 8th to 12th
                 Text(text = "Target Class:", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    listOf("8th", "9th", "10th", "11th", "12th").forEach { cls ->
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(listOf("8th", "9th", "10th", "11th", "12th")) { cls ->
                         FilterChip(
                             selected = selectedClass == cls,
                             onClick = { selectedClass = cls },
@@ -1300,19 +1433,45 @@ fun AddStudentResultsDialog(
                 Text(text = "Subject Marks Obtained:", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = DeepNavy)
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    OutlinedTextField(value = engMarks, onValueChange = { engMarks = it }, label = { Text("Eng (100)") }, modifier = Modifier.weight(1f))
-                    OutlinedTextField(value = urduMarks, onValueChange = { urduMarks = it }, label = { Text("Urdu (100)") }, modifier = Modifier.weight(1f))
-                    OutlinedTextField(value = mathMarks, onValueChange = { mathMarks = it }, label = { Text("Math (100)") }, modifier = Modifier.weight(1f))
+                    OutlinedTextField(value = engMarks, onValueChange = { engMarks = it }, label = { Text("Eng (100)") }, modifier = Modifier.weight(1f), singleLine = true)
+                    OutlinedTextField(value = urduMarks, onValueChange = { urduMarks = it }, label = { Text("Urdu (100)") }, modifier = Modifier.weight(1f), singleLine = true)
+                    OutlinedTextField(value = mathMarks, onValueChange = { mathMarks = it }, label = { Text("Math (100)") }, modifier = Modifier.weight(1f), singleLine = true)
                 }
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    OutlinedTextField(value = sciMarks, onValueChange = { sciMarks = it }, label = { Text("Sci/Phy (100)") }, modifier = Modifier.weight(1f))
-                    OutlinedTextField(value = socMarks, onValueChange = { socMarks = it }, label = { Text("Chem/SS (100)") }, modifier = Modifier.weight(1f))
+                    OutlinedTextField(value = sciMarks, onValueChange = { sciMarks = it }, label = { Text("Sci/Phy (100)") }, modifier = Modifier.weight(1f), singleLine = true)
+                    OutlinedTextField(value = socMarks, onValueChange = { socMarks = it }, label = { Text("Chem/SS (100)") }, modifier = Modifier.weight(1f), singleLine = true)
                 }
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    OutlinedTextField(value = compMarks, onValueChange = { compMarks = it }, label = { Text("Comp/Bio (100)") }, modifier = Modifier.weight(1f))
-                    OutlinedTextField(value = islMarks, onValueChange = { islMarks = it }, label = { Text("Islamiat (50)") }, modifier = Modifier.weight(1f))
+                    OutlinedTextField(value = compMarks, onValueChange = { compMarks = it }, label = { Text("Comp/Bio (100)") }, modifier = Modifier.weight(1f), singleLine = true)
+                    OutlinedTextField(value = islMarks, onValueChange = { islMarks = it }, label = { Text("Islamiat (50)") }, modifier = Modifier.weight(1f), singleLine = true)
+                }
+
+                OutlinedTextField(
+                    value = remarks,
+                    onValueChange = { remarks = it },
+                    label = { Text("Remarks") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Publish Marksheet to Students", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = DeepNavy)
+                    Switch(checked = isPublished, onCheckedChange = { isPublished = it })
+                }
+
+                if (validationError != null) {
+                    Text(
+                        text = validationError!!,
+                        color = StatusFailRed,
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.Medium
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(6.dp))
@@ -1326,55 +1485,48 @@ fun AddStudentResultsDialog(
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
                         onClick = {
-                            if (studentName.isNotBlank() && rollNumber.isNotBlank()) {
-                                val em = engMarks.toIntOrNull() ?: 0
-                                val um = urduMarks.toIntOrNull() ?: 0
-                                val mm = mathMarks.toIntOrNull() ?: 0
-                                val sm = sciMarks.toIntOrNull() ?: 0
-                                val socm = socMarks.toIntOrNull() ?: 0
-                                val cm = compMarks.toIntOrNull() ?: 0
-                                val im = islMarks.toIntOrNull() ?: 0
-
-                                val totalObt = em + um + mm + sm + socm + cm + im
-                                val totalMax = 650
-                                val pct = (totalObt.toDouble() / totalMax) * 100
-                                val grade = when {
-                                    pct >= 80 -> "A+"
-                                    pct >= 70 -> "A"
-                                    pct >= 60 -> "B"
-                                    pct >= 50 -> "C"
-                                    pct >= 40 -> "D"
-                                    else -> "F"
-                                }
-                                val status = if (pct >= 40 && em >= 33 && um >= 33 && mm >= 33) "PASS" else "FAIL"
-
-                                val result = StudentResults(
-                                    studentName = studentName.trim(),
-                                    fatherName = fatherName.trim().ifBlank { "N/A" },
-                                    rollNumber = rollNumber.trim().uppercase(),
-                                    classLevel = selectedClass,
-                                    section = section.trim().uppercase(),
-                                    examTerm = examName,
-                                    boardName = "BISE / FBISE Gilgit-Baltistan",
-                                    englishObtained = em,
-                                    urduObtained = um,
-                                    mathObtained = mm,
-                                    scienceObtained = sm,
-                                    scienceSubjectName = if (selectedClass == "8th") "General Science" else "Physics",
-                                    chemistryOrSocialObtained = socm,
-                                    chemistryOrSocialSubjectName = if (selectedClass == "8th") "Social Studies" else "Chemistry",
-                                    electiveObtained = cm,
-                                    electiveSubjectName = if (selectedClass == "8th") "Computer Education" else "Computer Science",
-                                    islamicStudiesObtained = im,
-                                    remarks = "Annual Board Evaluation",
-                                    isPublished = true
-                                )
-                                onSave(result)
+                            if (studentName.isBlank() || rollNumber.isBlank()) {
+                                validationError = "Student name and roll number are required."
+                                return@Button
                             }
+                            val em = (engMarks.toIntOrNull() ?: 0).coerceIn(0, 100)
+                            val um = (urduMarks.toIntOrNull() ?: 0).coerceIn(0, 100)
+                            val mm = (mathMarks.toIntOrNull() ?: 0).coerceIn(0, 100)
+                            val sm = (sciMarks.toIntOrNull() ?: 0).coerceIn(0, 100)
+                            val socm = (socMarks.toIntOrNull() ?: 0).coerceIn(0, 100)
+                            val cm = (compMarks.toIntOrNull() ?: 0).coerceIn(0, 100)
+                            val im = (islMarks.toIntOrNull() ?: 0).coerceIn(0, 50)
+
+                            val result = StudentResults(
+                                id = existingResults?.id ?: java.util.UUID.randomUUID().toString(),
+                                studentName = studentName.trim(),
+                                fatherName = fatherName.trim().ifBlank { "N/A" },
+                                rollNumber = rollNumber.trim().uppercase(),
+                                classLevel = selectedClass,
+                                section = section.trim().uppercase().ifBlank { "A" },
+                                examTerm = examName.trim().ifBlank { "Annual Board Examination 2026" },
+                                boardName = boardName.trim().ifBlank { "BISE / FBISE Gilgit-Baltistan" },
+                                academicYear = existingResults?.academicYear ?: "2025-2026",
+                                englishObtained = em,
+                                urduObtained = um,
+                                mathObtained = mm,
+                                scienceObtained = sm,
+                                scienceSubjectName = existingResults?.scienceSubjectName ?: if (selectedClass == "8th") "General Science" else "Physics",
+                                chemistryOrSocialObtained = socm,
+                                chemistryOrSocialSubjectName = existingResults?.chemistryOrSocialSubjectName ?: if (selectedClass == "8th") "Social Studies" else "Chemistry",
+                                electiveObtained = cm,
+                                electiveSubjectName = existingResults?.electiveSubjectName ?: if (selectedClass == "8th") "Computer Education" else "Computer Science",
+                                islamicStudiesObtained = im,
+                                remarks = remarks.trim().ifBlank { "Annual Board Evaluation" },
+                                enteredBy = existingResults?.enteredBy ?: "Exam Controller / Principal Office",
+                                dateRecorded = System.currentTimeMillis(),
+                                isPublished = isPublished
+                            )
+                            onSave(result)
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = DeepNavy)
                     ) {
-                        Text("Save Marksheet")
+                        Text(if (isEditing) "Update Marksheet" else "Save Marksheet")
                     }
                 }
             }

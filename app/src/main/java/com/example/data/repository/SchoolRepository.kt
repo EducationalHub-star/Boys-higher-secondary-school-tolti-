@@ -4,7 +4,9 @@ import com.example.data.local.InitialSchoolData
 import com.example.data.local.SchoolDatabase
 import com.example.data.model.AdminActivityLog
 import com.example.data.model.AdminUser
+import com.example.data.model.AppDesignConfig
 import com.example.data.model.AttendanceRecord
+import com.example.data.model.ClassSubjectRecord
 import com.example.data.model.CollegeAnnouncement
 import com.example.data.model.DailyAttendance
 import com.example.data.model.FeeRecord
@@ -17,7 +19,9 @@ import com.example.data.model.StudentProfileRecord
 import com.example.data.model.StudentResult
 import com.example.data.model.StudentResults
 import com.example.data.model.TeacherProfileRecord
+import com.example.data.model.TeacherRating
 import com.example.data.model.TimetablePeriod
+import com.example.util.MediaStorageHelper
 import com.example.util.SecurityUtils
 import kotlinx.coroutines.flow.Flow
 import org.json.JSONArray
@@ -186,6 +190,11 @@ class SchoolRepository(private val database: SchoolDatabase) {
         logAdminAction("PUBLISH_ANNOUNCEMENT", "Set published=$isPublished for notice ID $id")
     }
 
+    suspend fun updateAnnouncement(announcement: CollegeAnnouncement) {
+        database.announcementDao().updateAnnouncement(announcement)
+        logAdminAction("UPDATE_ANNOUNCEMENT", "Updated notice '${announcement.title}'")
+    }
+
     suspend fun deleteAnnouncement(announcement: CollegeAnnouncement) {
         database.announcementDao().deleteAnnouncement(announcement)
         logAdminAction("DELETE_ANNOUNCEMENT", "Deleted notice '${announcement.title}'")
@@ -217,19 +226,63 @@ class SchoolRepository(private val database: SchoolDatabase) {
     val allTeachersFlow: Flow<List<TeacherProfileRecord>> =
         database.teacherProfileDao().getAllTeachers()
 
+    suspend fun getTeacherById(id: String): TeacherProfileRecord? =
+        database.teacherProfileDao().getTeacherById(id)
+
     suspend fun insertTeacher(teacher: TeacherProfileRecord) {
         database.teacherProfileDao().insertTeacher(teacher)
         logAdminAction("ADD_TEACHER", "Added faculty profile '${teacher.name}' (${teacher.designation})")
     }
 
     suspend fun updateTeacher(teacher: TeacherProfileRecord) {
+        val previous = database.teacherProfileDao().getTeacherById(teacher.id)
         database.teacherProfileDao().updateTeacher(teacher)
+        if (previous?.photoUri != null && previous.photoUri != teacher.photoUri) {
+            MediaStorageHelper.deleteLocalMediaIfManaged(previous.photoUri)
+        }
         logAdminAction("UPDATE_TEACHER", "Updated faculty profile '${teacher.name}'")
+    }
+
+    suspend fun updateTeacherPhoto(teacherId: String, newPhotoUri: String?) {
+        val existing = database.teacherProfileDao().getTeacherById(teacherId)
+        database.teacherProfileDao().updateTeacherPhotoUri(teacherId, newPhotoUri)
+        if (existing?.photoUri != null && existing.photoUri != newPhotoUri) {
+            MediaStorageHelper.deleteLocalMediaIfManaged(existing.photoUri)
+        }
+        val action = if (newPhotoUri == null) "DELETE_TEACHER_PHOTO" else "UPDATE_TEACHER_PHOTO"
+        logAdminAction(action, "Updated photo for teacher ID $teacherId (${existing?.name ?: "Faculty"})")
     }
 
     suspend fun deleteTeacher(teacher: TeacherProfileRecord) {
         database.teacherProfileDao().deleteTeacher(teacher)
+        MediaStorageHelper.deleteLocalMediaIfManaged(teacher.photoUri)
         logAdminAction("DELETE_TEACHER", "Deleted faculty profile '${teacher.name}'")
+    }
+
+    // --- TEACHER RATINGS & FEEDBACK ---
+    val allTeacherRatingsFlow: Flow<List<TeacherRating>> =
+        database.teacherRatingDao().getAllRatings()
+
+    fun getApprovedRatingsForTeacher(teacherId: String): Flow<List<TeacherRating>> =
+        database.teacherRatingDao().getApprovedRatingsForTeacher(teacherId)
+
+    suspend fun insertTeacherRating(rating: TeacherRating) {
+        database.teacherRatingDao().insertRating(rating)
+        logAdminAction("RATE_TEACHER", "Student rating logged for ${rating.teacherName} (${rating.rating} stars)")
+    }
+
+    suspend fun updateTeacherRating(rating: TeacherRating) {
+        database.teacherRatingDao().updateRating(rating)
+    }
+
+    suspend fun deleteTeacherRating(rating: TeacherRating) {
+        database.teacherRatingDao().deleteRating(rating)
+        logAdminAction("DELETE_RATING", "Removed rating for ${rating.teacherName}")
+    }
+
+    suspend fun setRatingApproval(ratingId: String, isApproved: Boolean) {
+        database.teacherRatingDao().updateApproval(ratingId, isApproved)
+        logAdminAction("MODERATE_RATING", "Set approved=$isApproved for rating $ratingId")
     }
 
     // --- FEES MANAGEMENT ---
@@ -312,12 +365,59 @@ class SchoolRepository(private val database: SchoolDatabase) {
     }
 
     suspend fun togglePhotoPublish(id: String, isPublished: Boolean) {
-        // Retrieve and update
+        database.galleryDao().updatePublishStatus(id, isPublished)
+        logAdminAction("PUBLISH_PHOTO", "Set published=$isPublished for gallery photo ID $id")
     }
 
     suspend fun deleteGalleryPhoto(photo: GalleryPhoto) {
         database.galleryDao().deletePhoto(photo)
         logAdminAction("DELETE_PHOTO", "Deleted gallery item '${photo.title}'")
+    }
+
+    // --- CLASSES & SUBJECTS CURRICULUM ---
+    val allClassSubjectsFlow: Flow<List<ClassSubjectRecord>> =
+        database.classSubjectDao().getAllClassSubjects()
+
+    suspend fun insertClassSubject(item: ClassSubjectRecord) {
+        database.classSubjectDao().insertClassSubject(item)
+        logAdminAction("ADD_SUBJECT", "Added ${item.subjectName} (${item.subjectCode}) to Class ${item.classLevel}")
+    }
+
+    suspend fun updateClassSubject(item: ClassSubjectRecord) {
+        database.classSubjectDao().updateClassSubject(item)
+        logAdminAction("UPDATE_SUBJECT", "Updated ${item.subjectName} (${item.subjectCode}) in Class ${item.classLevel}")
+    }
+
+    suspend fun deleteClassSubject(item: ClassSubjectRecord) {
+        database.classSubjectDao().deleteClassSubject(item)
+        logAdminAction("DELETE_SUBJECT", "Removed ${item.subjectName} from Class ${item.classLevel}")
+    }
+
+    // --- APP DESIGN & APPEARANCE CUSTOMIZATION ---
+    val publishedDesignConfigFlow: Flow<AppDesignConfig?> =
+        database.appDesignConfigDao().getConfigFlow(AppDesignConfig.ID_PUBLISHED)
+
+    val draftDesignConfigFlow: Flow<AppDesignConfig?> =
+        database.appDesignConfigDao().getConfigFlow(AppDesignConfig.ID_DRAFT)
+
+    suspend fun saveDraftDesignConfig(config: AppDesignConfig) {
+        val draft = config.copy(id = AppDesignConfig.ID_DRAFT, lastUpdatedTimestamp = System.currentTimeMillis())
+        database.appDesignConfigDao().upsertConfig(draft)
+        logAdminAction("DESIGN_DRAFT_SAVED", "Saved design draft (theme=${draft.themeMode}, card=${draft.cardStyle})")
+    }
+
+    suspend fun publishDesignConfig(config: AppDesignConfig) {
+        val published = config.copy(id = AppDesignConfig.ID_PUBLISHED, lastUpdatedTimestamp = System.currentTimeMillis())
+        database.appDesignConfigDao().upsertConfig(published)
+        database.appDesignConfigDao().deleteConfigById(AppDesignConfig.ID_DRAFT)
+        logAdminAction("DESIGN_PUBLISHED", "Published app-wide theme=${published.themeMode}, card=${published.cardStyle}, button=${published.buttonStyle}")
+    }
+
+    suspend fun resetDesignConfigToDefault() {
+        val defaultConfig = AppDesignConfig(id = AppDesignConfig.ID_PUBLISHED, lastUpdatedTimestamp = System.currentTimeMillis())
+        database.appDesignConfigDao().upsertConfig(defaultConfig)
+        database.appDesignConfigDao().deleteConfigById(AppDesignConfig.ID_DRAFT)
+        logAdminAction("DESIGN_RESET", "Restored default CampusConnect school theme & layout.")
     }
 
     // --- SCHOOL SETTINGS ---

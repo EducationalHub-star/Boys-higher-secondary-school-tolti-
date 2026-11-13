@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Grade
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Public
@@ -64,6 +65,12 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.StudentResult
 import com.example.ui.theme.DeepNavy
 import com.example.ui.theme.ElegantGold
+import com.example.ui.theme.LocalAppDesignConfig
+import com.example.ui.theme.RoyalBlue
+import com.example.ui.theme.designCardBorder
+import com.example.ui.theme.designCardColors
+import com.example.ui.theme.designCardShape
+import com.example.ui.viewmodel.DeleteTarget
 import com.example.ui.viewmodel.SchoolViewModel
 import com.example.util.UrduLocalization
 
@@ -295,8 +302,12 @@ fun PublicResultsLedgerContent(
                         result = res,
                         isAdmin = isAdmin,
                         onViewCard = { viewModel.selectedResultCard.value = res },
+                        onEdit = {
+                            viewModel.editingResult.value = res
+                            viewModel.showAdminResultDialog.value = true
+                        },
                         onTogglePublish = { viewModel.toggleResultPublish(res) },
-                        onDelete = { viewModel.deleteResult(res) }
+                        onDelete = { viewModel.requestDelete(DeleteTarget.Result(res)) }
                     )
                 }
             }
@@ -305,13 +316,16 @@ fun PublicResultsLedgerContent(
         // Admin quick entry FAB
         if (isAdmin) {
             FloatingActionButton(
-                onClick = { viewModel.showAdminResultDialog.value = true },
+                onClick = {
+                    viewModel.editingResult.value = null
+                    viewModel.showAdminResultDialog.value = true
+                },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(contentPadding)
                     .padding(16.dp)
                     .testTag("admin_add_result_fab"),
-                containerColor = Color(0xFF0B192C),
+                containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = Color(0xFFFBBF24)
             ) {
                 Icon(imageVector = Icons.Default.Add, contentDescription = "Enter New Result")
@@ -325,16 +339,19 @@ private fun ResultCardItem(
     result: StudentResult,
     isAdmin: Boolean,
     onViewCard: () -> Unit,
+    onEdit: () -> Unit,
     onTogglePublish: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val designConfig = LocalAppDesignConfig.current
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("result_card_${result.id}"),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        shape = designCardShape(designConfig),
+        colors = designCardColors(designConfig),
+        border = designCardBorder(designConfig),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (designConfig.cardStyle == "ELEVATED") 2.dp else 0.dp)
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             // Header Row: Exam Term & Grade
@@ -479,6 +496,12 @@ private fun ResultCardItem(
 
                 if (isAdmin) {
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        IconButton(
+                            onClick = onEdit,
+                            modifier = Modifier.size(34.dp).testTag("edit_result_${result.id}")
+                        ) {
+                            Icon(imageVector = Icons.Default.Edit, contentDescription = "Edit Result", tint = RoyalBlue, modifier = Modifier.size(18.dp))
+                        }
                         IconButton(onClick = onTogglePublish, modifier = Modifier.size(34.dp)) {
                             Icon(
                                 imageVector = if (result.isPublished) Icons.Default.Public else Icons.Default.PublicOff,
@@ -487,8 +510,11 @@ private fun ResultCardItem(
                                 modifier = Modifier.size(18.dp)
                             )
                         }
-                        IconButton(onClick = onDelete, modifier = Modifier.size(34.dp)) {
-                            Icon(imageVector = Icons.Default.Delete, contentDescription = "Delete", tint = Color(0xFF94A3B8), modifier = Modifier.size(18.dp))
+                        IconButton(
+                            onClick = onDelete,
+                            modifier = Modifier.size(34.dp).testTag("delete_result_${result.id}")
+                        ) {
+                            Icon(imageVector = Icons.Default.Delete, contentDescription = "Delete Result", tint = Color(0xFFEF4444), modifier = Modifier.size(18.dp))
                         }
                     }
                 }

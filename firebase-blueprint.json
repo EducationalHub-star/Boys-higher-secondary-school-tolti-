@@ -1,44 +1,173 @@
 {
   "entities": {
     "UserProfile": {
-      "collection": "users",
-      "path": "users/{userId}",
-      "fields": {
-        "userId": { "type": "string", "required": true },
-        "email": { "type": "string", "required": true },
-        "displayName": { "type": "string", "required": false },
-        "role": { "type": "string", "required": true },
-        "createdAt": { "type": "timestamp", "required": false }
-      }
+      "title": "UserProfile",
+      "description": "Authenticated user profile and RBAC role assignment (ADMIN or STUDENT).",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["ADMIN", "STUDENT"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "email", "role"]
     },
     "Announcement": {
-      "collection": "announcements",
-      "path": "announcements/{announcementId}",
-      "fields": {
-        "id": { "type": "string", "required": true },
-        "title": { "type": "string", "required": true },
-        "content": { "type": "string", "required": true },
-        "author": { "type": "string", "required": true },
-        "isUrgent": { "type": "boolean", "required": false },
-        "createdAt": { "type": "timestamp", "required": false }
-      }
+      "title": "Announcement",
+      "description": "Official school circular or notice published by administration.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "category": { "type": "string" },
+        "targetAudience": { "type": "string" },
+        "author": { "type": "string" },
+        "isUrgent": { "type": "boolean" },
+        "isPinned": { "type": "boolean" },
+        "isPublished": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "content", "author", "isPublished"]
     },
     "StudentResult": {
-      "collection": "student_results",
-      "path": "student_results/{resultId}",
-      "fields": {
-        "id": { "type": "string", "required": true },
-        "studentName": { "type": "string", "required": true },
-        "rollNumber": { "type": "string", "required": true },
-        "classLevel": { "type": "string", "required": true },
-        "section": { "type": "string", "required": true },
-        "examTerm": { "type": "string", "required": true },
-        "totalMaxMarks": { "type": "number", "required": true },
-        "totalObtainedMarks": { "type": "number", "required": true },
-        "grade": { "type": "string", "required": true },
-        "status": { "type": "string", "required": true },
-        "createdAt": { "type": "timestamp", "required": false }
-      }
+      "title": "StudentResult",
+      "description": "Published or draft student exam score record protected by Admin RBAC.",
+      "type": "object",
+      "properties": {
+        "studentName": { "type": "string" },
+        "rollNumber": { "type": "string" },
+        "classLevel": { "type": "string" },
+        "examTerm": { "type": "string" },
+        "subjectName": { "type": "string" },
+        "subjectCode": { "type": "string" },
+        "totalMarks": { "type": "integer" },
+        "obtainedMarks": { "type": "integer" },
+        "grade": { "type": "string" },
+        "status": { "type": "string" },
+        "isPublished": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["studentName", "rollNumber", "classLevel", "examTerm", "totalMarks", "obtainedMarks", "grade", "status", "isPublished"]
+    },
+    "DesignConfig": {
+      "title": "DesignConfig",
+      "description": "School app theme, color palette, typography scale, and home layout settings.",
+      "type": "object",
+      "properties": {
+        "themeMode": { "type": "string", "enum": ["SCHOOL_CUSTOM", "LIGHT", "DARK"] },
+        "primaryColorHex": { "type": "string" },
+        "secondaryColorHex": { "type": "string" },
+        "accentColorHex": { "type": "string" },
+        "backgroundColorHex": { "type": "string" },
+        "buttonStyle": { "type": "string", "enum": ["ROUNDED", "PILL", "SHARP"] },
+        "cardStyle": { "type": "string", "enum": ["ELEVATED", "OUTLINED", "GLASS"] },
+        "fontSizeScale": { "type": "number" },
+        "iconNavStyle": { "type": "string", "enum": ["DEFAULT", "COMPACT", "PILL"] },
+        "homeSectionOrder": { "type": "string" },
+        "hiddenHomeSections": { "type": "string" },
+        "announcementsLayout": { "type": "string" },
+        "resultsLayout": { "type": "string" },
+        "adminDashboardLayout": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["themeMode", "primaryColorHex", "secondaryColorHex", "accentColorHex", "buttonStyle", "cardStyle"]
+    },
+    "TeacherRating": {
+      "title": "TeacherRating",
+      "description": "Student star rating and moderated written feedback for faculty members.",
+      "type": "object",
+      "properties": {
+        "authorUid": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "teacherName": { "type": "string" },
+        "studentName": { "type": "string" },
+        "studentRollNumber": { "type": "string" },
+        "rating": { "type": "integer" },
+        "feedback": { "type": "string" },
+        "subjectName": { "type": "string" },
+        "isApproved": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["authorUid", "teacherId", "teacherName", "studentRollNumber", "rating", "isApproved"]
+    },
+    "GalleryPhoto": {
+      "title": "GalleryPhoto",
+      "description": "Campus photo metadata record managed by Admin.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "drawableResName": { "type": "string" },
+        "isPublished": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "category", "isPublished"]
+    },
+    "TeacherProfile": {
+      "title": "TeacherProfile",
+      "description": "Public faculty directory entry managed by Admin.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "designation": { "type": "string" },
+        "department": { "type": "string" },
+        "qualification": { "type": "string" },
+        "assignedSubjects": { "type": "string" },
+        "assignedClasses": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "designation", "department"]
+    },
+    "StudentProfile": {
+      "title": "StudentProfile",
+      "description": "Student enrollment record restricted to Admin access.",
+      "type": "object",
+      "properties": {
+        "fullName": { "type": "string" },
+        "fatherName": { "type": "string" },
+        "rollNumber": { "type": "string" },
+        "classLevel": { "type": "string" },
+        "section": { "type": "string" },
+        "status": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["fullName", "fatherName", "rollNumber", "classLevel"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Authenticated user role and profile documents."
+    },
+    "/announcements/{announcementId}": {
+      "schema": { "$ref": "#/entities/Announcement" },
+      "description": "School notices and circulars (public read on published items, Admin write)."
+    },
+    "/student_results/{resultId}": {
+      "schema": { "$ref": "#/entities/StudentResult" },
+      "description": "Examination results (public read on published items, Admin write)."
+    },
+    "/design_config/{configId}": {
+      "schema": { "$ref": "#/entities/DesignConfig" },
+      "description": "Published and draft theme/layout configurations."
+    },
+    "/teacher_ratings/{ratingId}": {
+      "schema": { "$ref": "#/entities/TeacherRating" },
+      "description": "Moderated student ratings and feedback for teachers."
+    },
+    "/gallery_photos/{photoId}": {
+      "schema": { "$ref": "#/entities/GalleryPhoto" },
+      "description": "School gallery photo metadata."
+    },
+    "/teachers/{teacherId}": {
+      "schema": { "$ref": "#/entities/TeacherProfile" },
+      "description": "Faculty directory records."
+    },
+    "/students/{studentId}": {
+      "schema": { "$ref": "#/entities/StudentProfile" },
+      "description": "Confidential student enrollment profiles."
     }
   }
 }

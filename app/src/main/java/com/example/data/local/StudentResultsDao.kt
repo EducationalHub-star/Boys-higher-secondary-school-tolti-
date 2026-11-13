@@ -37,7 +37,7 @@ interface StudentResultsDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertStudentResult(result: StudentResults)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAllStudentResults(results: List<StudentResults>)
 
     @Update

@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -14,7 +13,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Badge
-import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Person
@@ -37,11 +35,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.example.data.model.FeeRecord
 import com.example.ui.theme.DeepNavy
 import com.example.ui.theme.RoyalBlue
 import com.example.ui.viewmodel.SchoolViewModel
@@ -50,16 +48,18 @@ import com.example.ui.viewmodel.SchoolViewModel
 @Composable
 fun RecordFeeDialog(
     viewModel: SchoolViewModel,
+    existingFee: FeeRecord? = null,
     onDismiss: () -> Unit
 ) {
-    var studentRoll by remember { mutableStateOf("") }
-    var studentName by remember { mutableStateOf("") }
-    var classLevel by remember { mutableStateOf("10th") }
-    var feeType by remember { mutableStateOf("Tuition Fee") }
-    var amountStr by remember { mutableStateOf("800") }
-    var dueDate by remember { mutableStateOf("2026-11-15") }
-    var status by remember { mutableStateOf("PAID") }
-    var paymentMode by remember { mutableStateOf("Cash Counter") }
+    val isEditing = existingFee != null
+    var studentRoll by remember(existingFee?.id) { mutableStateOf(existingFee?.studentRollNumber ?: "") }
+    var studentName by remember(existingFee?.id) { mutableStateOf(existingFee?.studentName ?: "") }
+    var classLevel by remember(existingFee?.id) { mutableStateOf(existingFee?.classLevel ?: "10th") }
+    var feeType by remember(existingFee?.id) { mutableStateOf(existingFee?.feeType ?: "Tuition Fee") }
+    var amountStr by remember(existingFee?.id) { mutableStateOf(existingFee?.amount?.toInt()?.toString() ?: "800") }
+    var dueDate by remember(existingFee?.id) { mutableStateOf(existingFee?.dueDate ?: "2026-11-15") }
+    var status by remember(existingFee?.id) { mutableStateOf(existingFee?.status ?: "PAID") }
+    var paymentMode by remember(existingFee?.id) { mutableStateOf(existingFee?.paymentMode ?: "Cash Counter") }
 
     var classExpanded by remember { mutableStateOf(false) }
     var feeTypeExpanded by remember { mutableStateOf(false) }
@@ -68,7 +68,7 @@ fun RecordFeeDialog(
 
     val classList = listOf("5th", "6th", "7th", "8th", "9th", "10th", "11th", "12th")
     val feeTypes = listOf("Tuition Fee", "Science Lab Fee", "Computer Lab Fee", "Sports & Library Fund", "Board Examination Fee")
-    val statusList = listOf("PAID", "PENDING")
+    val statusList = listOf("PAID", "PENDING", "OVERDUE")
     val paymentModes = listOf("Cash Counter", "Bank Challan", "Online Transfer", "JazzCash / EasyPaisa")
 
     AlertDialog(
@@ -78,7 +78,7 @@ fun RecordFeeDialog(
                 Icon(Icons.Default.Payments, contentDescription = null, tint = RoyalBlue)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Record Student Fee",
+                    text = if (isEditing) "Edit Fee Record" else "Record Student Fee",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = DeepNavy
@@ -254,16 +254,33 @@ fun RecordFeeDialog(
             Button(
                 onClick = {
                     val amt = amountStr.toDoubleOrNull() ?: 0.0
-                    viewModel.recordFee(
-                        rollNo = studentRoll.trim(),
-                        name = studentName.trim(),
-                        classLevel = classLevel,
-                        feeType = feeType,
-                        amount = amt,
-                        dueDate = dueDate.trim(),
-                        status = status,
-                        paymentMode = paymentMode
-                    )
+                    if (existingFee == null) {
+                        viewModel.recordFee(
+                            rollNo = studentRoll.trim(),
+                            name = studentName.trim(),
+                            classLevel = classLevel,
+                            feeType = feeType,
+                            amount = amt,
+                            dueDate = dueDate.trim(),
+                            status = status,
+                            paymentMode = paymentMode
+                        )
+                    } else {
+                        viewModel.updateFee(
+                            existingFee.copy(
+                                studentRollNumber = studentRoll.trim(),
+                                studentName = studentName.trim(),
+                                classLevel = classLevel,
+                                feeType = feeType,
+                                amount = amt,
+                                dueDate = dueDate.trim(),
+                                status = status,
+                                paymentMode = paymentMode,
+                                receiptNumber = existingFee.receiptNumber ?: if (status == "PAID") "REC-2026-${(100..999).random()}" else null,
+                                paymentDate = existingFee.paymentDate ?: if (status == "PAID") "2026-11-03" else null
+                            )
+                        )
+                    }
                     onDismiss()
                 },
                 enabled = studentRoll.isNotBlank() && studentName.isNotBlank() && (amountStr.toDoubleOrNull() ?: 0.0) > 0,
@@ -271,7 +288,7 @@ fun RecordFeeDialog(
                 shape = RoundedCornerShape(8.dp),
                 modifier = Modifier.testTag("save_fee_btn")
             ) {
-                Text("Record Fee")
+                Text(if (isEditing) "Update Fee" else "Record Fee")
             }
         },
         dismissButton = {
@@ -284,3 +301,4 @@ fun RecordFeeDialog(
         }
     )
 }
+

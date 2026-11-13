@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MeetingRoom
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Card
@@ -46,6 +47,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.TimetablePeriod
+import com.example.ui.theme.LocalAppDesignConfig
+import com.example.ui.theme.RoyalBlue
+import com.example.ui.theme.designCardBorder
+import com.example.ui.theme.designCardColors
+import com.example.ui.theme.designCardShape
+import com.example.ui.viewmodel.DeleteTarget
 import com.example.ui.viewmodel.SchoolViewModel
 import com.example.util.UrduLocalization
 
@@ -64,7 +71,7 @@ fun PublicTimetableScreen(
     val daysOfWeek = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
 
     val periodsForClassAndDay = allPeriods.filter {
-        it.classLevel == selectedClass && (it.dayOfWeek.equals(selectedDay, ignoreCase = true) || it.dayOfWeek == "Monday")
+        it.classLevel == selectedClass && it.dayOfWeek.equals(selectedDay, ignoreCase = true)
     }.sortedBy { it.periodNumber }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -178,7 +185,11 @@ fun PublicTimetableScreen(
                     PeriodCardItem(
                         period = period,
                         isAdmin = isAdmin,
-                        onDelete = { viewModel.deleteTimetablePeriod(period) }
+                        onEdit = {
+                            viewModel.editingTimetable.value = period
+                            viewModel.showAddTimetableDialog.value = true
+                        },
+                        onDelete = { viewModel.requestDelete(DeleteTarget.Timetable(period)) }
                     )
                 }
             }
@@ -186,13 +197,16 @@ fun PublicTimetableScreen(
 
         if (isAdmin) {
             FloatingActionButton(
-                onClick = { viewModel.showAddTimetableDialog.value = true },
+                onClick = {
+                    viewModel.editingTimetable.value = null
+                    viewModel.showAddTimetableDialog.value = true
+                },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(contentPadding)
                     .padding(16.dp)
                     .testTag("admin_add_timetable_fab"),
-                containerColor = Color(0xFF0B192C),
+                containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = Color(0xFFFBBF24)
             ) {
                 Icon(imageVector = Icons.Default.Add, contentDescription = "Add Period")
@@ -205,15 +219,18 @@ fun PublicTimetableScreen(
 private fun PeriodCardItem(
     period: TimetablePeriod,
     isAdmin: Boolean,
+    onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val designConfig = LocalAppDesignConfig.current
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("period_item_${period.id}"),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        shape = designCardShape(designConfig),
+        colors = designCardColors(designConfig),
+        border = designCardBorder(designConfig),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (designConfig.cardStyle == "ELEVATED") 2.dp else 0.dp)
     ) {
         Row(
             modifier = Modifier
@@ -272,8 +289,13 @@ private fun PeriodCardItem(
             }
 
             if (isAdmin) {
-                IconButton(onClick = onDelete) {
-                    Icon(imageVector = Icons.Default.Delete, contentDescription = "Delete", tint = Color(0xFF94A3B8), modifier = Modifier.size(18.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    IconButton(onClick = onEdit, modifier = Modifier.testTag("edit_period_${period.id}")) {
+                        Icon(imageVector = Icons.Default.Edit, contentDescription = "Edit Period", tint = RoyalBlue, modifier = Modifier.size(18.dp))
+                    }
+                    IconButton(onClick = onDelete, modifier = Modifier.testTag("delete_period_${period.id}")) {
+                        Icon(imageVector = Icons.Default.Delete, contentDescription = "Delete Period", tint = Color(0xFFEF4444), modifier = Modifier.size(18.dp))
+                    }
                 }
             }
         }

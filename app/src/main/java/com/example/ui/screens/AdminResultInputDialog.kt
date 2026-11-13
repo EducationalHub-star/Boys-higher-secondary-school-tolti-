@@ -1,7 +1,5 @@
 package com.example.ui.screens
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,6 +34,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -58,18 +57,22 @@ import com.example.ui.viewmodel.SchoolViewModel
 @Composable
 fun AdminResultInputDialog(
     viewModel: SchoolViewModel,
+    existingResult: StudentResult? = null,
     onDismiss: () -> Unit
 ) {
-    var studentName by remember { mutableStateOf("Muhammad Khan") }
-    var rollNumber by remember { mutableStateOf("BHSS-2026-104") }
-    var selectedClass by remember { mutableStateOf("12th") }
-    var selectedTerm by remember { mutableStateOf("Mid Term Exam 2026") }
-    var selectedSubject by remember { mutableStateOf("Computer Science") }
-    var subjectCode by remember { mutableStateOf("CS-12") }
-    var totalMarksText by remember { mutableStateOf("100") }
-    var obtainedMarksText by remember { mutableStateOf("88") }
-    var remarks by remember { mutableStateOf("Strong conceptual understanding and programming skills.") }
-    var adminName by remember { mutableStateOf("Sir Ghulam Nabi (Exam Incharge)") }
+    val isEditing = existingResult != null
+
+    var studentName by remember(existingResult?.id) { mutableStateOf(existingResult?.studentName ?: "Muhammad Khan") }
+    var rollNumber by remember(existingResult?.id) { mutableStateOf(existingResult?.rollNumber ?: "BHSS-2026-104") }
+    var selectedClass by remember(existingResult?.id) { mutableStateOf(existingResult?.classLevel ?: "12th") }
+    var selectedTerm by remember(existingResult?.id) { mutableStateOf(existingResult?.examTerm ?: "Mid Term Exam 2026") }
+    var selectedSubject by remember(existingResult?.id) { mutableStateOf(existingResult?.subjectName ?: "Computer Science") }
+    var subjectCode by remember(existingResult?.id) { mutableStateOf(existingResult?.subjectCode ?: "CS-12") }
+    var totalMarksText by remember(existingResult?.id) { mutableStateOf((existingResult?.totalMarks ?: 100).toString()) }
+    var obtainedMarksText by remember(existingResult?.id) { mutableStateOf((existingResult?.obtainedMarks ?: 88).toString()) }
+    var remarks by remember(existingResult?.id) { mutableStateOf(existingResult?.remarks ?: "Strong conceptual understanding and programming skills.") }
+    var adminName by remember(existingResult?.id) { mutableStateOf(existingResult?.enteredByAdmin ?: "Sir Ghulam Nabi (Exam Incharge)") }
+    var isPublished by remember(existingResult?.id) { mutableStateOf(existingResult?.isPublished ?: true) }
 
     var isSubjectDropdownExpanded by remember { mutableStateOf(false) }
     var isTermDropdownExpanded by remember { mutableStateOf(false) }
@@ -92,11 +95,11 @@ fun AdminResultInputDialog(
         "Pre-Board Mock Examination"
     )
 
-    val classLevels = listOf("8th", "9th", "10th", "11th", "12th")
+    val classLevels = listOf("5th", "6th", "7th", "8th", "9th", "10th", "11th", "12th")
 
     // Live calculation
     val totalMarks = totalMarksText.toIntOrNull() ?: 100
-    val obtainedMarks = obtainedMarksText.toIntOrNull() ?: 0
+    val obtainedMarks = (obtainedMarksText.toIntOrNull() ?: 0).coerceIn(0, totalMarks.coerceAtLeast(1))
     val percentage = if (totalMarks > 0) (obtainedMarks.toDouble() / totalMarks.toDouble()) * 100.0 else 0.0
     val calculatedGrade = StudentResult.calculateGrade(obtainedMarks, totalMarks)
     val isPass = obtainedMarks >= (totalMarks * 0.40)
@@ -142,12 +145,12 @@ fun AdminResultInputDialog(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
-                                text = "Admin Marks Input",
+                                text = if (isEditing) "Edit Exam Result" else "Admin Marks Input",
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Save verified academic grades to Room DB",
+                                text = if (isEditing) "Update existing academic score without duplicates" else "Save verified academic grades to Room DB",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -194,11 +197,12 @@ fun AdminResultInputDialog(
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.height(4.dp))
-                Row(
+                androidx.compose.foundation.lazy.LazyRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    classLevels.forEach { lvl ->
+                    items(classLevels.size) { index ->
+                        val lvl = classLevels[index]
                         FilterChip(
                             selected = selectedClass == lvl,
                             onClick = {
@@ -383,6 +387,21 @@ fun AdminResultInputDialog(
                     singleLine = true
                 )
 
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Publish Switch
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text("Publish to Students Immediately", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text("If off, kept as Admin draft only", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(checked = isPublished, onCheckedChange = { isPublished = it })
+                }
+
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // Action Buttons
@@ -397,18 +416,38 @@ fun AdminResultInputDialog(
                     Button(
                         onClick = {
                             if (studentName.isNotBlank() && rollNumber.isNotBlank()) {
-                                viewModel.saveStudentResult(
-                                    studentName = studentName.trim(),
-                                    rollNumber = rollNumber.trim(),
-                                    classLevel = selectedClass,
-                                    examTerm = selectedTerm,
-                                    subjectName = selectedSubject,
-                                    subjectCode = subjectCode,
-                                    totalMarks = totalMarks,
-                                    obtainedMarks = obtainedMarks,
-                                    remarks = remarks.trim(),
-                                    enteredBy = adminName.trim()
-                                )
+                                if (existingResult == null) {
+                                    viewModel.saveStudentResult(
+                                        studentName = studentName.trim(),
+                                        rollNumber = rollNumber.trim(),
+                                        classLevel = selectedClass,
+                                        examTerm = selectedTerm,
+                                        subjectName = selectedSubject,
+                                        subjectCode = subjectCode,
+                                        totalMarks = totalMarks,
+                                        obtainedMarks = obtainedMarks,
+                                        remarks = remarks.trim(),
+                                        enteredBy = adminName.trim(),
+                                        isPublished = isPublished
+                                    )
+                                } else {
+                                    viewModel.updateResult(
+                                        existingResult.copy(
+                                            studentName = studentName.trim(),
+                                            rollNumber = rollNumber.trim(),
+                                            classLevel = selectedClass,
+                                            examTerm = selectedTerm,
+                                            subjectName = selectedSubject,
+                                            subjectCode = subjectCode,
+                                            totalMarks = totalMarks,
+                                            obtainedMarks = obtainedMarks,
+                                            remarks = remarks.trim(),
+                                            enteredByAdmin = adminName.trim().ifBlank { existingResult.enteredByAdmin },
+                                            isPublished = isPublished
+                                        )
+                                    )
+                                    onDismiss()
+                                }
                             }
                         },
                         enabled = studentName.isNotBlank() && rollNumber.isNotBlank(),
@@ -417,10 +456,11 @@ fun AdminResultInputDialog(
                     ) {
                         Icon(Icons.Default.Grade, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Save Result to Room")
+                        Text(if (isEditing) "Update Result" else "Save Result to Room")
                     }
                 }
             }
         }
     }
 }
+

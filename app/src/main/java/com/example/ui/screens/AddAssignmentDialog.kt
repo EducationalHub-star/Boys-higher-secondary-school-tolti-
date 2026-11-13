@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -28,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -43,23 +46,27 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.example.data.model.StudentAssignment
 import com.example.ui.viewmodel.SchoolViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddAssignmentDialog(
     viewModel: SchoolViewModel,
+    existingAssignment: StudentAssignment? = null,
     onDismiss: () -> Unit
 ) {
-    var title by remember { mutableStateOf("") }
-    var selectedSubject by remember { mutableStateOf("Computer Science") }
-    var courseCode by remember { mutableStateOf("CS-12") }
-    var selectedClass by remember { mutableStateOf("12th") }
-    var teacherName by remember { mutableStateOf("Sir Ghulam Nabi") }
-    var dueDateFormatted by remember { mutableStateOf("Tomorrow, 11:59 PM") }
-    var totalMarksText by remember { mutableStateOf("50") }
-    var priority by remember { mutableStateOf("NORMAL") }
-    var description by remember { mutableStateOf("") }
+    val isEditing = existingAssignment != null
+    var title by remember(existingAssignment?.id) { mutableStateOf(existingAssignment?.title ?: "") }
+    var selectedSubject by remember(existingAssignment?.id) { mutableStateOf(existingAssignment?.subject ?: "Computer Science") }
+    var courseCode by remember(existingAssignment?.id) { mutableStateOf(existingAssignment?.courseCode ?: "CS-12") }
+    var selectedClass by remember(existingAssignment?.id) { mutableStateOf(existingAssignment?.classLevel ?: "12th") }
+    var teacherName by remember(existingAssignment?.id) { mutableStateOf(existingAssignment?.teacherName ?: "Sir Ghulam Nabi") }
+    var dueDateFormatted by remember(existingAssignment?.id) { mutableStateOf(existingAssignment?.dueDateFormatted ?: "Tomorrow, 11:59 PM") }
+    var totalMarksText by remember(existingAssignment?.id) { mutableStateOf((existingAssignment?.totalMarks ?: 50).toString()) }
+    var priority by remember(existingAssignment?.id) { mutableStateOf(existingAssignment?.priority ?: "NORMAL") }
+    var description by remember(existingAssignment?.id) { mutableStateOf(existingAssignment?.description ?: "") }
+    var isPublished by remember(existingAssignment?.id) { mutableStateOf(existingAssignment?.isPublished ?: true) }
 
     var isSubjectDropdownExpanded by remember { mutableStateOf(false) }
 
@@ -74,7 +81,7 @@ fun AddAssignmentDialog(
         "General Science" to "SCI"
     )
 
-    val classLevels = listOf("8th", "9th", "10th", "11th", "12th")
+    val classLevels = listOf("5th", "6th", "7th", "8th", "9th", "10th", "11th", "12th")
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -107,7 +114,7 @@ fun AddAssignmentDialog(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "New Student Assignment",
+                            text = if (isEditing) "Edit Homework Assignment" else "New Student Assignment",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold
                         )
@@ -169,16 +176,16 @@ fun AddAssignmentDialog(
 
                 // Class Level Selection Chips
                 Text(
-                    text = "Class Level (8th to 12th):",
+                    text = "Class Level (5th to 12th):",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.height(6.dp))
-                Row(
+                LazyRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    classLevels.forEach { lvl ->
+                    items(classLevels) { lvl ->
                         FilterChip(
                             selected = selectedClass == lvl,
                             onClick = {
@@ -197,7 +204,7 @@ fun AddAssignmentDialog(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Teacher & Due Date
+                // Teacher & Total Marks
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -267,7 +274,18 @@ fun AddAssignmentDialog(
                     maxLines = 3
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Visible to Students", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    Switch(checked = isPublished, onCheckedChange = { isPublished = it })
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
 
                 // Actions
                 Row(
@@ -281,29 +299,47 @@ fun AddAssignmentDialog(
                     Button(
                         onClick = {
                             if (title.isNotBlank()) {
-                                val dueMillis = System.currentTimeMillis() + (2L * 24 * 3600 * 1000)
-                                viewModel.addAssignment(
-                                    title = title.trim(),
-                                    subject = selectedSubject,
-                                    courseCode = courseCode,
-                                    classLevel = selectedClass,
-                                    teacherName = teacherName.ifBlank { "Subject Instructor" },
-                                    description = description.ifBlank { "Complete all questions and submit neatly." },
-                                    dueDateTimestamp = dueMillis,
-                                    dueDateFormatted = dueDateFormatted.ifBlank { "In 2 Days" },
-                                    totalMarks = totalMarksText.toIntOrNull() ?: 50,
-                                    priority = priority
-                                )
+                                if (existingAssignment == null) {
+                                    val dueMillis = System.currentTimeMillis() + (2L * 24 * 3600 * 1000)
+                                    viewModel.addAssignment(
+                                        title = title.trim(),
+                                        subject = selectedSubject,
+                                        courseCode = courseCode,
+                                        classLevel = selectedClass,
+                                        teacherName = teacherName.ifBlank { "Subject Instructor" },
+                                        description = description.ifBlank { "Complete all questions and submit neatly." },
+                                        dueDateTimestamp = dueMillis,
+                                        dueDateFormatted = dueDateFormatted.ifBlank { "In 2 Days" },
+                                        totalMarks = totalMarksText.toIntOrNull() ?: 50,
+                                        priority = priority
+                                    )
+                                } else {
+                                    viewModel.updateAssignment(
+                                        existingAssignment.copy(
+                                            title = title.trim(),
+                                            subject = selectedSubject,
+                                            courseCode = courseCode,
+                                            classLevel = selectedClass,
+                                            teacherName = teacherName.ifBlank { existingAssignment.teacherName },
+                                            description = description.ifBlank { existingAssignment.description },
+                                            dueDateFormatted = dueDateFormatted.ifBlank { existingAssignment.dueDateFormatted },
+                                            totalMarks = totalMarksText.toIntOrNull() ?: existingAssignment.totalMarks,
+                                            priority = priority,
+                                            isPublished = isPublished
+                                        )
+                                    )
+                                }
                             }
                         },
                         enabled = title.isNotBlank(),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F5132)),
                         modifier = Modifier.testTag("save_assignment_button")
                     ) {
-                        Text("Save Assignment")
+                        Text(if (isEditing) "Update Assignment" else "Save Assignment")
                     }
                 }
             }
         }
     }
 }
+

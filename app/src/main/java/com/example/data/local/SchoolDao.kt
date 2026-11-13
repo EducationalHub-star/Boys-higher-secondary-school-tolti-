@@ -8,7 +8,9 @@ import androidx.room.Query
 import androidx.room.Update
 import com.example.data.model.AdminActivityLog
 import com.example.data.model.AdminUser
+import com.example.data.model.AppDesignConfig
 import com.example.data.model.AttendanceRecord
+import com.example.data.model.ClassSubjectRecord
 import com.example.data.model.CollegeAnnouncement
 import com.example.data.model.DailyAttendance
 import com.example.data.model.FeeRecord
@@ -20,6 +22,7 @@ import com.example.data.model.StudentAssignment
 import com.example.data.model.StudentProfileRecord
 import com.example.data.model.StudentResult
 import com.example.data.model.TeacherProfileRecord
+import com.example.data.model.TeacherRating
 import com.example.data.model.TimetablePeriod
 import kotlinx.coroutines.flow.Flow
 
@@ -41,7 +44,7 @@ interface AssignmentDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAssignment(assignment: StudentAssignment)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAllAssignments(assignments: List<StudentAssignment>)
 
     @Update
@@ -81,7 +84,7 @@ interface ResultDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertResult(result: StudentResult)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAllResults(results: List<StudentResult>)
 
     @Update
@@ -109,7 +112,7 @@ interface AttendanceDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAttendanceRecord(record: AttendanceRecord)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAllAttendance(records: List<AttendanceRecord>)
 
     @Update
@@ -134,7 +137,7 @@ interface NotificationDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertNotification(notification: SchoolNotification)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAllNotifications(notifications: List<SchoolNotification>)
 
     @Query("UPDATE school_notifications SET isRead = 1 WHERE id = :id")
@@ -168,11 +171,14 @@ interface AnnouncementDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAnnouncement(announcement: CollegeAnnouncement)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAllAnnouncements(announcements: List<CollegeAnnouncement>)
 
     @Query("UPDATE college_announcements SET isPublished = :isPublished WHERE id = :id")
     suspend fun updatePublishStatus(id: String, isPublished: Boolean)
+
+    @Update
+    suspend fun updateAnnouncement(announcement: CollegeAnnouncement)
 
     @Delete
     suspend fun deleteAnnouncement(announcement: CollegeAnnouncement)
@@ -196,7 +202,7 @@ interface StudentProfileDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertStudent(student: StudentProfileRecord)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAllStudents(students: List<StudentProfileRecord>)
 
     @Update
@@ -215,17 +221,23 @@ interface TeacherProfileDao {
     @Query("SELECT * FROM teacher_profiles ORDER BY name ASC")
     fun getAllTeachers(): Flow<List<TeacherProfileRecord>>
 
+    @Query("SELECT * FROM teacher_profiles WHERE id = :id LIMIT 1")
+    suspend fun getTeacherById(id: String): TeacherProfileRecord?
+
     @Query("SELECT * FROM teacher_profiles WHERE department = :dept ORDER BY name ASC")
     fun getTeachersByDepartment(dept: String): Flow<List<TeacherProfileRecord>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTeacher(teacher: TeacherProfileRecord)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAllTeachers(teachers: List<TeacherProfileRecord>)
 
     @Update
     suspend fun updateTeacher(teacher: TeacherProfileRecord)
+
+    @Query("UPDATE teacher_profiles SET photoUri = :photoUri WHERE id = :teacherId")
+    suspend fun updateTeacherPhotoUri(teacherId: String, photoUri: String?)
 
     @Delete
     suspend fun deleteTeacher(teacher: TeacherProfileRecord)
@@ -249,7 +261,7 @@ interface FeeDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertFee(fee: FeeRecord)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAllFees(fees: List<FeeRecord>)
 
     @Update
@@ -274,7 +286,7 @@ interface DailyAttendanceDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertDailyAttendance(attendance: DailyAttendance)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAllDailyAttendance(records: List<DailyAttendance>)
 
     @Update
@@ -296,7 +308,7 @@ interface TimetableDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPeriod(period: TimetablePeriod)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAllPeriods(periods: List<TimetablePeriod>)
 
     @Update
@@ -321,11 +333,14 @@ interface GalleryDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPhoto(photo: GalleryPhoto)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAllPhotos(photos: List<GalleryPhoto>)
 
     @Update
     suspend fun updatePhoto(photo: GalleryPhoto)
+
+    @Query("UPDATE gallery_photos SET isPublished = :isPublished WHERE id = :id")
+    suspend fun updatePublishStatus(id: String, isPublished: Boolean)
 
     @Delete
     suspend fun deletePhoto(photo: GalleryPhoto)
@@ -374,4 +389,64 @@ interface AdminActivityLogDao {
 
     @Query("DELETE FROM admin_activity_logs")
     suspend fun clearLogs()
+}
+
+@Dao
+interface TeacherRatingDao {
+
+    @Query("SELECT * FROM teacher_ratings ORDER BY timestamp DESC")
+    fun getAllRatings(): Flow<List<TeacherRating>>
+
+    @Query("SELECT * FROM teacher_ratings WHERE teacherId = :teacherId AND isApproved = 1 ORDER BY timestamp DESC")
+    fun getApprovedRatingsForTeacher(teacherId: String): Flow<List<TeacherRating>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertRating(rating: TeacherRating)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertAllRatings(ratings: List<TeacherRating>)
+
+    @Update
+    suspend fun updateRating(rating: TeacherRating)
+
+    @Delete
+    suspend fun deleteRating(rating: TeacherRating)
+
+    @Query("UPDATE teacher_ratings SET isApproved = :isApproved WHERE id = :ratingId")
+    suspend fun updateApproval(ratingId: String, isApproved: Boolean)
+}
+
+@Dao
+interface AppDesignConfigDao {
+
+    @Query("SELECT * FROM app_design_config WHERE id = :id LIMIT 1")
+    fun getConfigFlow(id: Int): Flow<AppDesignConfig?>
+
+    @Query("SELECT * FROM app_design_config WHERE id = :id LIMIT 1")
+    suspend fun getConfig(id: Int): AppDesignConfig?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertConfig(config: AppDesignConfig)
+
+    @Query("DELETE FROM app_design_config WHERE id = :id")
+    suspend fun deleteConfigById(id: Int)
+}
+
+@Dao
+interface ClassSubjectDao {
+
+    @Query("SELECT * FROM class_subjects ORDER BY classLevel ASC, subjectName ASC")
+    fun getAllClassSubjects(): Flow<List<ClassSubjectRecord>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertClassSubject(item: ClassSubjectRecord)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertAllClassSubjects(items: List<ClassSubjectRecord>)
+
+    @Update
+    suspend fun updateClassSubject(item: ClassSubjectRecord)
+
+    @Delete
+    suspend fun deleteClassSubject(item: ClassSubjectRecord)
 }

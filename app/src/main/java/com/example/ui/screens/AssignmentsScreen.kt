@@ -29,7 +29,10 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.HourglassTop
+import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.PublicOff
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Warning
@@ -67,6 +70,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.StudentAssignment
+import com.example.ui.theme.LocalAppDesignConfig
+import com.example.ui.theme.RoyalBlue
+import com.example.ui.theme.designCardBorder
+import com.example.ui.theme.designCardColors
+import com.example.ui.theme.designCardShape
+import com.example.ui.viewmodel.DeleteTarget
 import com.example.ui.viewmodel.SchoolViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -75,11 +84,19 @@ fun AssignmentsScreen(
     viewModel: SchoolViewModel,
     contentPadding: PaddingValues
 ) {
-    val allAssignments by viewModel.allAssignments.collectAsState()
-    val filteredAssignments by viewModel.filteredAssignments.collectAsState()
+    val allAssignmentsRaw by viewModel.allAssignments.collectAsState()
+    val filteredAssignmentsRaw by viewModel.filteredAssignments.collectAsState()
+    val isAdmin by viewModel.isAdminLoggedIn.collectAsState()
     val selectedClass by viewModel.selectedClassLevel.collectAsState()
     val statusFilter by viewModel.assignmentStatusFilter.collectAsState()
     val searchQuery by viewModel.assignmentSearchQuery.collectAsState()
+
+    val allAssignments = remember(allAssignmentsRaw, isAdmin) {
+        if (isAdmin) allAssignmentsRaw else allAssignmentsRaw.filter { it.isPublished }
+    }
+    val filteredAssignments = remember(filteredAssignmentsRaw, isAdmin) {
+        if (isAdmin) filteredAssignmentsRaw else filteredAssignmentsRaw.filter { it.isPublished }
+    }
 
     val pendingCount = allAssignments.count { !it.isCompleted && !it.isOverdue }
     val completedCount = allAssignments.count { it.isCompleted }
@@ -87,13 +104,18 @@ fun AssignmentsScreen(
 
     Scaffold(
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { viewModel.showAddAssignmentDialog.value = true },
-                containerColor = Color(0xFF0F5132),
-                contentColor = Color.White,
-                modifier = Modifier.testTag("add_assignment_fab")
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Add Assignment")
+            if (isAdmin) {
+                FloatingActionButton(
+                    onClick = {
+                        viewModel.editingAssignment.value = null
+                        viewModel.showAddAssignmentDialog.value = true
+                    },
+                    containerColor = Color(0xFF0F5132),
+                    contentColor = Color.White,
+                    modifier = Modifier.testTag("add_assignment_fab")
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Add Assignment")
+                }
             }
         }
     ) { innerPadding ->
@@ -305,8 +327,14 @@ fun AssignmentsScreen(
                 ) { assignment ->
                     AssignmentRowCard(
                         assignment = assignment,
+                        isAdmin = isAdmin,
                         onToggleCompletion = { viewModel.toggleAssignmentCompletion(assignment) },
-                        onDelete = { viewModel.deleteAssignment(assignment) }
+                        onEdit = {
+                            viewModel.editingAssignment.value = assignment
+                            viewModel.showAddAssignmentDialog.value = true
+                        },
+                        onTogglePublish = { viewModel.toggleAssignmentPublish(assignment) },
+                        onDelete = { viewModel.requestDelete(DeleteTarget.Assignment(assignment)) }
                     )
                 }
             }
@@ -317,9 +345,13 @@ fun AssignmentsScreen(
 @Composable
 private fun AssignmentRowCard(
     assignment: StudentAssignment,
+    isAdmin: Boolean,
     onToggleCompletion: () -> Unit,
+    onEdit: () -> Unit,
+    onTogglePublish: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val designConfig = LocalAppDesignConfig.current
     val cardBg by animateColorAsState(
         targetValue = if (assignment.isCompleted) Color(0xFFF0FDF4) else MaterialTheme.colorScheme.surface,
         label = "assignment_bg"
@@ -329,9 +361,10 @@ private fun AssignmentRowCard(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("assignment_item_${assignment.id}"),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = cardBg),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        shape = designCardShape(designConfig),
+        colors = CardDefaults.cardColors(containerColor = if (designConfig.cardStyle == "GLASS") cardBg.copy(alpha = 0.88f) else cardBg),
+        border = designCardBorder(designConfig),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (designConfig.cardStyle == "ELEVATED") 2.dp else 0.dp)
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             // Header: Badges & Due Date
@@ -460,16 +493,42 @@ private fun AssignmentRowCard(
                     )
                 }
 
-                IconButton(
-                    onClick = onDelete,
-                    modifier = Modifier.size(32.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = "Delete",
-                        tint = Color.Gray.copy(alpha = 0.7f),
-                        modifier = Modifier.size(16.dp)
-                    )
+                if (isAdmin) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                        IconButton(
+                            onClick = onEdit,
+                            modifier = Modifier.size(32.dp).testTag("edit_assignment_${assignment.id}")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "Edit Assignment",
+                                tint = RoyalBlue,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        IconButton(
+                            onClick = onTogglePublish,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (assignment.isPublished) Icons.Default.Public else Icons.Default.PublicOff,
+                                contentDescription = "Toggle Publish",
+                                tint = if (assignment.isPublished) Color(0xFF059669) else Color(0xFFDC2626),
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        IconButton(
+                            onClick = onDelete,
+                            modifier = Modifier.size(32.dp).testTag("delete_assignment_${assignment.id}")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Delete Assignment",
+                                tint = Color(0xFFEF4444),
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
                 }
             }
 

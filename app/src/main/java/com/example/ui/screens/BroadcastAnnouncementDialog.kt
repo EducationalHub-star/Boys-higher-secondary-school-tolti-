@@ -24,6 +24,7 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -43,20 +44,24 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.example.data.model.CollegeAnnouncement
 import com.example.ui.viewmodel.SchoolViewModel
 
 @Composable
 fun BroadcastAnnouncementDialog(
     viewModel: SchoolViewModel,
+    existingAnnouncement: CollegeAnnouncement? = null,
     onDismiss: () -> Unit
 ) {
-    var title by remember { mutableStateOf("") }
-    var content by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf("Academic") }
-    var targetAudience by remember { mutableStateOf("All Students") }
-    var author by remember { mutableStateOf("Principal Office & Administration") }
-    var isUrgent by remember { mutableStateOf(false) }
-    var isPinned by remember { mutableStateOf(true) }
+    val isEditing = existingAnnouncement != null
+    var title by remember(existingAnnouncement?.id) { mutableStateOf(existingAnnouncement?.title ?: "") }
+    var content by remember(existingAnnouncement?.id) { mutableStateOf(existingAnnouncement?.content ?: "") }
+    var category by remember(existingAnnouncement?.id) { mutableStateOf(existingAnnouncement?.category ?: "Academic") }
+    var targetAudience by remember(existingAnnouncement?.id) { mutableStateOf(existingAnnouncement?.targetAudience ?: "All Students") }
+    var author by remember(existingAnnouncement?.id) { mutableStateOf(existingAnnouncement?.author ?: "Principal Office & Administration") }
+    var isUrgent by remember(existingAnnouncement?.id) { mutableStateOf(existingAnnouncement?.isUrgent ?: false) }
+    var isPinned by remember(existingAnnouncement?.id) { mutableStateOf(existingAnnouncement?.isPinned ?: true) }
+    var isPublished by remember(existingAnnouncement?.id) { mutableStateOf(existingAnnouncement?.isPublished ?: true) }
 
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
@@ -69,7 +74,7 @@ fun BroadcastAnnouncementDialog(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(20.dp))
                 .testTag("broadcast_announcement_dialog"),
-            color = Color.White,
+            color = MaterialTheme.colorScheme.surface,
             tonalElevation = 6.dp
         ) {
             Column(
@@ -102,14 +107,14 @@ fun BroadcastAnnouncementDialog(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
-                                text = "Broadcast Announcement",
+                                text = if (isEditing) "Edit Official Notice" else "Broadcast Announcement",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Dispatches instant alert to student devices",
+                                text = if (isEditing) "Update existing circular without duplicating" else "Dispatches instant alert to student devices",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF6B7280)
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -118,7 +123,7 @@ fun BroadcastAnnouncementDialog(
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = "Close",
-                            tint = Color(0xFF6B7280)
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -145,7 +150,7 @@ fun BroadcastAnnouncementDialog(
                     text = "CATEGORY",
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF4B5563)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Row(
                     modifier = Modifier
@@ -189,7 +194,7 @@ fun BroadcastAnnouncementDialog(
                     text = "TARGET AUDIENCE",
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF4B5563),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp)
                 )
                 Row(
@@ -267,7 +272,7 @@ fun BroadcastAnnouncementDialog(
                 ) {
                     Column {
                         Text("Mark as Urgent Alert", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                        Text("Triggers priority sound & vibration", fontSize = 11.sp, color = Color(0xFF6B7280))
+                        Text("Triggers priority sound & vibration", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(
                         checked = isUrgent,
@@ -288,7 +293,7 @@ fun BroadcastAnnouncementDialog(
                 ) {
                     Column {
                         Text("Pin to Top of Dashboard", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                        Text("Featured banner for students", fontSize = 11.sp, color = Color(0xFF6B7280))
+                        Text("Featured banner for students", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(
                         checked = isPinned,
@@ -298,6 +303,20 @@ fun BroadcastAnnouncementDialog(
                             checkedTrackColor = Color(0xFF0F5132)
                         )
                     )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text("Published to Students", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text("Visible in student notices feed", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(checked = isPublished, onCheckedChange = { isPublished = it })
                 }
 
                 if (errorMessage != null) {
@@ -311,42 +330,71 @@ fun BroadcastAnnouncementDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Action button
-                Button(
-                    onClick = {
-                        if (title.isBlank()) {
-                            errorMessage = "Please enter an announcement title."
-                            return@Button
-                        }
-                        if (content.isBlank()) {
-                            errorMessage = "Please enter notice content."
-                            return@Button
-                        }
-
-                        viewModel.broadcastAnnouncement(
-                            title = title.trim(),
-                            content = content.trim(),
-                            category = category,
-                            targetAudience = targetAudience,
-                            author = author.trim(),
-                            isUrgent = isUrgent,
-                            isPinned = isPinned
-                        )
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                        .testTag("broadcast_now_btn"),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isUrgent) Color(0xFFDC2626) else Color(0xFF1E3A8A)
-                    ),
-                    shape = RoundedCornerShape(12.dp)
+                // Action buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(imageVector = Icons.Default.Send, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Broadcast Alert Now", fontWeight = FontWeight.Bold)
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.height(48.dp)
+                    ) {
+                        Text("Cancel")
+                    }
+
+                    Button(
+                        onClick = {
+                            if (title.isBlank()) {
+                                errorMessage = "Please enter an announcement title."
+                                return@Button
+                            }
+                            if (content.isBlank()) {
+                                errorMessage = "Please enter notice content."
+                                return@Button
+                            }
+
+                            if (existingAnnouncement == null) {
+                                viewModel.broadcastAnnouncement(
+                                    title = title.trim(),
+                                    content = content.trim(),
+                                    category = category,
+                                    targetAudience = targetAudience,
+                                    author = author.trim(),
+                                    isUrgent = isUrgent,
+                                    isPinned = isPinned
+                                )
+                            } else {
+                                viewModel.updateAnnouncement(
+                                    existingAnnouncement.copy(
+                                        title = title.trim(),
+                                        content = content.trim(),
+                                        category = category,
+                                        targetAudience = targetAudience,
+                                        author = author.trim().ifBlank { existingAnnouncement.author },
+                                        isUrgent = isUrgent,
+                                        isPinned = isPinned,
+                                        isPublished = isPublished
+                                    )
+                                )
+                            }
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
+                            .testTag("broadcast_now_btn"),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isUrgent) Color(0xFFDC2626) else Color(0xFF1E3A8A)
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Send, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(if (isEditing) "Update Notice" else "Broadcast Alert Now", fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }
     }
 }
+

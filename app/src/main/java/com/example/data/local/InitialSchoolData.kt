@@ -3,6 +3,7 @@ package com.example.data.local
 import com.example.data.model.AdminActivityLog
 import com.example.data.model.AdminUser
 import com.example.data.model.AttendanceRecord
+import com.example.data.model.ClassSubjectRecord
 import com.example.data.model.CollegeAnnouncement
 import com.example.data.model.DailyAttendance
 import com.example.data.model.FeeRecord
@@ -16,6 +17,7 @@ import com.example.data.model.StudentProfileRecord
 import com.example.data.model.StudentResult
 import com.example.data.model.StudentResults
 import com.example.data.model.TeacherProfileRecord
+import com.example.data.model.TeacherRating
 import com.example.data.model.TimetablePeriod
 import com.example.util.SecurityUtils
 
@@ -1538,6 +1540,62 @@ object InitialSchoolData {
             remarks = "A Grade recipient. Passed Pre-Medical FSc Board with distinction.",
             isPublished = true
         )
+    )
+
+    fun getInitialTeacherRatings(): List<TeacherRating> = listOf(
+        TeacherRating(
+            id = "rate-001",
+            teacherId = "tch-001",
+            teacherName = "Sir Ghulam Nabi",
+            studentName = "Muhammad Khan",
+            studentRollNumber = "BHSS-2026-104",
+            rating = 5,
+            feedback = "Inspiring principal and CS teacher. Made pointers and OOP concepts crystal clear.",
+            subjectName = "Computer Science"
+        ),
+        TeacherRating(
+            id = "rate-002",
+            teacherId = "tch-001",
+            teacherName = "Sir Ghulam Nabi",
+            studentName = "Ali Raza",
+            studentRollNumber = "BHSS-2026-105",
+            rating = 5,
+            feedback = "Very supportive and always encourages practical programming in the computer lab.",
+            subjectName = "Computer Science"
+        ),
+        TeacherRating(
+            id = "rate-003",
+            teacherId = "tch-002",
+            teacherName = "Sir Muhammad Ali",
+            studentName = "Muhammad Khan",
+            studentRollNumber = "BHSS-2026-104",
+            rating = 5,
+            feedback = "Hands-on physics experiments and electromagnetism lectures are best in the valley.",
+            subjectName = "Physics"
+        ),
+        TeacherRating(
+            id = "rate-004",
+            teacherId = "tch-003",
+            teacherName = "Sir Hassan Raza",
+            studentName = "Khadim Hussain",
+            studentRollNumber = "BHSS-2026-106",
+            rating = 5,
+            feedback = "Excellent mastery over calculus and analytical geometry formulas.",
+            subjectName = "Mathematics"
+        )
+    )
+
+    fun getInitialClassSubjects(): List<ClassSubjectRecord> = listOf(
+        ClassSubjectRecord(id = "sub-12-cs", classLevel = "12th", subjectName = "Computer Science", subjectCode = "CS-12", teacherName = "Sir Ghulam Nabi", maxMarks = 100, passMarks = 40, isCompulsory = false),
+        ClassSubjectRecord(id = "sub-12-phy", classLevel = "12th", subjectName = "Physics", subjectCode = "PHY-12", teacherName = "Sir Muhammad Ali", maxMarks = 100, passMarks = 40, isCompulsory = true),
+        ClassSubjectRecord(id = "sub-12-math", classLevel = "12th", subjectName = "Mathematics", subjectCode = "MATH-12", teacherName = "Sir Hassan Raza", maxMarks = 100, passMarks = 40, isCompulsory = true),
+        ClassSubjectRecord(id = "sub-12-eng", classLevel = "12th", subjectName = "English Compulsory", subjectCode = "ENG-12", teacherName = "Sir Manzoor Hussain", maxMarks = 100, passMarks = 40, isCompulsory = true),
+        ClassSubjectRecord(id = "sub-11-cs", classLevel = "11th", subjectName = "Computer Science", subjectCode = "CS-11", teacherName = "Sir Ghulam Nabi", maxMarks = 100, passMarks = 40, isCompulsory = false),
+        ClassSubjectRecord(id = "sub-10-sci", classLevel = "10th", subjectName = "Physics", subjectCode = "PHY-10", teacherName = "Sir Muhammad Ali", maxMarks = 100, passMarks = 33, isCompulsory = true),
+        ClassSubjectRecord(id = "sub-10-math", classLevel = "10th", subjectName = "Mathematics", subjectCode = "MATH-10", teacherName = "Sir Hassan Raza", maxMarks = 100, passMarks = 33, isCompulsory = true),
+        ClassSubjectRecord(id = "sub-09-chem", classLevel = "9th", subjectName = "Chemistry", subjectCode = "CHEM-09", teacherName = "Sir Jaffar Hussain", maxMarks = 100, passMarks = 33, isCompulsory = true),
+        ClassSubjectRecord(id = "sub-08-gen", classLevel = "8th", subjectName = "General Science", subjectCode = "SCI-08", teacherName = "Sir Zakir Hussain", maxMarks = 100, passMarks = 33, isCompulsory = true),
+        ClassSubjectRecord(id = "sub-05-eng", classLevel = "5th", subjectName = "English Primary", subjectCode = "ENG-05", teacherName = "Sir Manzoor Hussain", maxMarks = 100, passMarks = 33, isCompulsory = true)
     )
 }
 
