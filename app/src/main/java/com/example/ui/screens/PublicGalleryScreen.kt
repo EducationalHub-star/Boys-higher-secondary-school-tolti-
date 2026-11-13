@@ -46,6 +46,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -67,6 +68,7 @@ import com.example.ui.theme.designCardColors
 import com.example.ui.theme.designCardShape
 import com.example.ui.viewmodel.DeleteTarget
 import com.example.ui.viewmodel.SchoolViewModel
+import com.example.util.MediaStorageHelper
 import com.example.util.UrduLocalization
 
 @Composable
@@ -298,23 +300,15 @@ private fun GalleryPhotoCard(
                     .fillMaxWidth()
                     .height(190.dp)
             ) {
-                if (!photo.photoUri.isNullOrBlank()) {
-                    AsyncImage(
-                        model = photo.photoUri,
-                        contentDescription = photo.title,
-                        placeholder = painterResource(id = drawableRes),
-                        error = painterResource(id = drawableRes),
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    Image(
-                        painter = painterResource(id = drawableRes),
-                        contentDescription = photo.title,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
+                val imageModel = remember(photo.photoUri, drawableRes) {
+                    MediaStorageHelper.resolvePhotoModel(photo.photoUri) ?: drawableRes
                 }
+                AsyncImage(
+                    model = imageModel,
+                    contentDescription = photo.title,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
 
                 // Category tag on image
                 Surface(
@@ -457,23 +451,15 @@ private fun PhotoLightboxDialog(
                         .fillMaxWidth()
                         .height(280.dp)
                 ) {
-                    if (!photo.photoUri.isNullOrBlank()) {
-                        AsyncImage(
-                            model = photo.photoUri,
-                            contentDescription = photo.title,
-                            placeholder = painterResource(id = drawableRes),
-                            error = painterResource(id = drawableRes),
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
-                        )
-                    } else {
-                        Image(
-                            painter = painterResource(id = drawableRes),
-                            contentDescription = photo.title,
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
-                        )
+                    val detailImageModel = remember(photo.photoUri, drawableRes) {
+                        MediaStorageHelper.resolvePhotoModel(photo.photoUri) ?: drawableRes
                     }
+                    AsyncImage(
+                        model = detailImageModel,
+                        contentDescription = photo.title,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
                     IconButton(
                         onClick = onDismiss,
                         modifier = Modifier

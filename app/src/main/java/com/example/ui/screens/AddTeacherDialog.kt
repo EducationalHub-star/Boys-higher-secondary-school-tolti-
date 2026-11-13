@@ -245,9 +245,12 @@ fun AddTeacherDialog(
                                 OutlinedButton(
                                     onClick = {
                                         photoError = null
-                                        photoPicker.launch(
+                                        MediaStorageHelper.launchImagePickerSafely(
+                                            photoPicker,
                                             PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                                        )
+                                        ) {
+                                            photoError = "No Gallery or photo picker app available on this device."
+                                        }
                                     },
                                     enabled = !isCopyingPhoto,
                                     shape = RoundedCornerShape(8.dp),

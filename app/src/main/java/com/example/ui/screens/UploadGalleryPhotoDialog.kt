@@ -196,9 +196,12 @@ fun UploadGalleryPhotoDialog(
                 ) {
                     Button(
                         onClick = {
-                            singlePickerLauncher.launch(
+                            MediaStorageHelper.launchImagePickerSafely(
+                                singlePickerLauncher,
                                 PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                            )
+                            ) {
+                                viewModel.showSnackbar("No Gallery or photo picker app available on this device.")
+                            }
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = DeepNavy),
                         shape = RoundedCornerShape(10.dp),
@@ -212,9 +215,12 @@ fun UploadGalleryPhotoDialog(
                     if (!isEditing) {
                         OutlinedButton(
                             onClick = {
-                                multiPickerLauncher.launch(
+                                MediaStorageHelper.launchImagePickerSafely(
+                                    multiPickerLauncher,
                                     PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                                )
+                                ) {
+                                    viewModel.showSnackbar("No Gallery or photo picker app available on this device.")
+                                }
                             },
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.weight(1f).testTag("pick_multi_photo_btn")

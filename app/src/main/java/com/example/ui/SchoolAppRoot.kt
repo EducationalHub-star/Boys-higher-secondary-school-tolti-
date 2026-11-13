@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -73,6 +74,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -455,7 +457,10 @@ fun SchoolAppRoot(viewModel: SchoolViewModel) {
                                 Text(
                                     text = if (isUrdu) "ہوم" else "Home",
                                     fontWeight = if (isHomeSelected) FontWeight.Bold else FontWeight.Medium,
-                                    fontSize = navLabelSize
+                                    fontSize = navLabelSize,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             },
                             colors = NavigationBarItemDefaults.colors(
@@ -499,7 +504,10 @@ fun SchoolAppRoot(viewModel: SchoolViewModel) {
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = if (isCompactNav) 10.sp else 11.sp,
                                     color = if (isResultsSelected) navAccentColor else Color(0xFFFDE68A),
-                                    letterSpacing = 0.4.sp
+                                    letterSpacing = 0.4.sp,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             },
                             colors = NavigationBarItemDefaults.colors(
@@ -530,7 +538,10 @@ fun SchoolAppRoot(viewModel: SchoolViewModel) {
                                 Text(
                                     text = if (isUrdu) "اعلانات" else "Notices",
                                     fontWeight = if (isNoticesSelected) FontWeight.Bold else FontWeight.Medium,
-                                    fontSize = navLabelSize
+                                    fontSize = navLabelSize,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             },
                             colors = NavigationBarItemDefaults.colors(
@@ -559,7 +570,10 @@ fun SchoolAppRoot(viewModel: SchoolViewModel) {
                                 Text(
                                     text = if (isUrdu) "حاضری" else "Attendance",
                                     fontWeight = if (isAttendanceSelected) FontWeight.Bold else FontWeight.Medium,
-                                    fontSize = navLabelSize
+                                    fontSize = navLabelSize,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             },
                             colors = NavigationBarItemDefaults.colors(
@@ -594,7 +608,10 @@ fun SchoolAppRoot(viewModel: SchoolViewModel) {
                                 Text(
                                     text = if (isUrdu) "ایڈمن" else "Admin",
                                     fontWeight = if (isAdminSelected) FontWeight.Bold else FontWeight.Medium,
-                                    fontSize = navLabelSize
+                                    fontSize = navLabelSize,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             },
                             colors = NavigationBarItemDefaults.colors(
@@ -610,7 +627,11 @@ fun SchoolAppRoot(viewModel: SchoolViewModel) {
                 }
             }
         ) { paddingValues ->
-            Box(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                Box(modifier = Modifier.fillMaxSize().widthIn(max = 960.dp)) {
                 when (currentSection) {
                     SchoolAppSection.HOME -> {
                         PublicHomeScreen(viewModel = viewModel, contentPadding = paddingValues)
@@ -646,6 +667,7 @@ fun SchoolAppRoot(viewModel: SchoolViewModel) {
                             onViewFeeReceipt = { fee -> feeForReceipt = fee }
                         )
                     }
+                }
                 }
 
                 // Real-Time Floating In-App Heads-Up Banner

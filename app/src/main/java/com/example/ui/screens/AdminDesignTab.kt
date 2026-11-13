@@ -475,21 +475,42 @@ fun AdminDesignTab(viewModel: SchoolViewModel) {
                     MediaBrandingPickerRow(
                         label = "School Emblem / Logo",
                         uri = draft.customLogoUri,
-                        onPick = { logoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                        onPick = {
+                            MediaStorageHelper.launchImagePickerSafely(
+                                logoPicker,
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            ) {
+                                viewModel.showSnackbar("No Gallery or photo picker app available on this device.")
+                            }
+                        },
                         onClear = { updateDraft { it.copy(customLogoUri = null) } }
                     )
 
                     MediaBrandingPickerRow(
                         label = "Home Welcome Banner Photo",
                         uri = draft.customBannerUri,
-                        onPick = { bannerPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                        onPick = {
+                            MediaStorageHelper.launchImagePickerSafely(
+                                bannerPicker,
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            ) {
+                                viewModel.showSnackbar("No Gallery or photo picker app available on this device.")
+                            }
+                        },
                         onClear = { updateDraft { it.copy(customBannerUri = null) } }
                     )
 
                     MediaBrandingPickerRow(
                         label = "App Background Image",
                         uri = draft.customBackgroundUri,
-                        onPick = { backgroundPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                        onPick = {
+                            MediaStorageHelper.launchImagePickerSafely(
+                                backgroundPicker,
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            ) {
+                                viewModel.showSnackbar("No Gallery or photo picker app available on this device.")
+                            }
+                        },
                         onClear = { updateDraft { it.copy(customBackgroundUri = null) } }
                     )
                 }

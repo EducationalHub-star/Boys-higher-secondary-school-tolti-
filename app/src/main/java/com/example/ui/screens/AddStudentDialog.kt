@@ -141,7 +141,12 @@ fun AddStudentDialog(
                     Column(modifier = Modifier.weight(1f)) {
                         OutlinedButton(
                             onClick = {
-                                photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                                MediaStorageHelper.launchImagePickerSafely(
+                                    photoPicker,
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                ) {
+                                    viewModel.showSnackbar("No Gallery or photo picker app available on this device.")
+                                }
                             },
                             shape = RoundedCornerShape(8.dp)
                         ) {

@@ -900,9 +900,13 @@ private fun AdminTeachersTab(viewModel: SchoolViewModel) {
                                         .size(68.dp)
                                         .clickable {
                                             photoTargetTeacher = teacher
-                                            teacherPhotoPicker.launch(
+                                            MediaStorageHelper.launchImagePickerSafely(
+                                                teacherPhotoPicker,
                                                 PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                                            )
+                                            ) {
+                                                photoTargetTeacher = null
+                                                viewModel.showSnackbar("No Gallery or photo picker app available on this device.")
+                                            }
                                         }
                                         .testTag("admin_teacher_avatar_${teacher.id}")
                                 ) {
@@ -1053,9 +1057,13 @@ private fun AdminTeachersTab(viewModel: SchoolViewModel) {
                             OutlinedButton(
                                 onClick = {
                                     photoTargetTeacher = teacher
-                                    teacherPhotoPicker.launch(
+                                    MediaStorageHelper.launchImagePickerSafely(
+                                        teacherPhotoPicker,
                                         PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                                    )
+                                    ) {
+                                        photoTargetTeacher = null
+                                        viewModel.showSnackbar("No Gallery or photo picker app available on this device.")
+                                    }
                                 },
                                 shape = designButtonShape(designConfig),
                                 modifier = Modifier
