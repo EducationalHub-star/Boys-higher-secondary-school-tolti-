@@ -46,8 +46,28 @@ jobs:
 
       - name: Verify APK
         run: |
-          test -s app/build/outputs/apk/debug/app-debug.apk
-          unzip -t app/build/outputs/apk/debug/app-debug.apk
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+
+          test -s "$APK"
+          unzip -t "$APK"
+
+          echo "APK verification successful"
+
+      - name: Generate SHA256
+        run: |
+          cd app/build/outputs/apk/debug
+          sha256sum app-debug.apk > app-debug.apk.sha256
+          cat app-debug.apk.sha256
+
+      - name: Upload Build Files
+        uses: actions/upload-artifact@v4
+        with:
+          name: CampusConnect-Verified-APK
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            app/build/outputs/apk/debug/app-debug.apk.sha256
+          compression-level: 0
+          if-no-files-found: error
 
       - name: Publish Direct APK Download
         env:
@@ -55,8 +75,9 @@ jobs:
         run: |
           gh release create "apk-${{ github.run_id }}-${{ github.run_attempt }}" \
             app/build/outputs/apk/debug/app-debug.apk \
+            app/build/outputs/apk/debug/app-debug.apk.sha256 \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "CampusConnect APK Build ${{ github.run_number }}" \
-            --notes "CampusConnect Android APK" \
+            --notes "Verified CampusConnect Android APK" \
             --latest=false
