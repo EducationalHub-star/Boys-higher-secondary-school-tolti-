@@ -10,6 +10,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -29,34 +33,73 @@ jobs:
         with:
           gradle-version: 9.3.1
 
-      - name: Create Debug Keystore
+      - name: Restore Original Debug Keystore
         run: |
-          keytool -genkeypair -v \
-            -keystore "$GITHUB_WORKSPACE/debug.keystore" \
-            -storepass android \
-            -alias androiddebugkey \
-            -keypass android \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -dname "CN=Android Debug,O=Android,C=US"
+          if [ -f "$GITHUB_WORKSPACE/debug.keystore.base64" ]; then
+            tr -d '\r\n' < "$GITHUB_WORKSPACE/debug.keystore.base64" | base64 -d > "$GITHUB_WORKSPACE/debug.keystore"
+            echo "Restored original debug.keystore from debug.keystore.base64"
+          else
+            echo "debug.keystore.base64 not found; generating fallback debug keystore"
+            keytool -genkeypair -v \
+              -keystore "$GITHUB_WORKSPACE/debug.keystore" \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+          keytool -list -v -keystore "$GITHUB_WORKSPACE/debug.keystore" -storepass android -alias androiddebugkey | grep -E "SHA1:|SHA256:"
 
-      - name: Build APK
-        run: gradle assembleDebug
+      - name: Build and Test APK
+        run: gradle assembleDebug :app:testDebugUnitTest --no-daemon
 
-      - name: Verify APK
+      - name: Verify APK Integrity, All DEX Checksums, Signature, Package and minSdk
         run: |
           APK="app/build/outputs/apk/debug/app-debug.apk"
-
           test -s "$APK"
-          unzip -t "$APK"
+          unzip -t "$APK" > /dev/null
 
-          echo "APK verification successful"
+          python3 - "$APK" << 'EOF'
+          import hashlib, re, struct, sys, zipfile, zlib
+
+          apk_path = sys.argv[1]
+          with zipfile.ZipFile(apk_path, 'r') as zf:
+              bad = zf.testzip()
+              assert bad is None, f"Corrupted ZIP entry: {bad}"
+              names = zf.namelist()
+              assert "AndroidManifest.xml" in names, "Missing AndroidManifest.xml"
+              assert "resources.arsc" in names, "Missing resources.arsc"
+              dex_names = sorted(n for n in names if re.match(r"^classes\d*\.dex$", n))
+              assert dex_names, "No classes*.dex files found in APK"
+              for name in dex_names:
+                  data = zf.read(name)
+                  assert len(data) >= 112 and data[:4] == b"dex\n", f"Invalid DEX magic in {name}"
+                  adler, = struct.unpack_from("<I", data, 8)
+                  sha1_hdr = data[12:32]
+                  file_size, = struct.unpack_from("<I", data, 32)
+                  assert file_size == len(data), f"{name} size mismatch: header={file_size} actual={len(data)}"
+                  assert hashlib.sha1(data[32:]).digest() == sha1_hdr, f"{name} SHA-1 mismatch"
+                  assert (zlib.adler32(data[12:]) & 0xFFFFFFFF) == adler, f"{name} Adler32 mismatch"
+              print(f"Verified {len(dex_names)} DEX files cleanly: {dex_names}")
+          EOF
+
+          SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          BUILD_TOOLS_DIR=$(ls -d "$SDK_ROOT"/build-tools/* | sort -V | tail -n 1)
+          echo "Using Android build-tools: $BUILD_TOOLS_DIR"
+
+          "$BUILD_TOOLS_DIR/apksigner" verify --verbose --print-certs "$APK"
+          BADGING=$("$BUILD_TOOLS_DIR/aapt2" dump badging "$APK")
+          echo "$BADGING" | grep -E "package:|sdkVersion:|targetSdkVersion:|native-code:"
+          echo "$BADGING" | grep -q "package: name='com.aistudio.kasurumaltok.vzrkx'"
+          echo "$BADGING" | grep -q "sdkVersion:'23'"
 
       - name: Generate SHA256
         run: |
           cd app/build/outputs/apk/debug
           sha256sum app-debug.apk > app-debug.apk.sha256
+          sha256sum -c app-debug.apk.sha256
           cat app-debug.apk.sha256
 
       - name: Upload Build Files
@@ -79,5 +122,5 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "CampusConnect APK Build ${{ github.run_number }}" \
-            --notes "Verified CampusConnect Android APK" \
+            --notes "Verified CampusConnect Android APK (Android 6.0 API 23+, SHA-256 verified)" \
             --latest=false
