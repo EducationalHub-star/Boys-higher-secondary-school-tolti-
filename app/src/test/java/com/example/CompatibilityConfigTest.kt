@@ -33,7 +33,7 @@ import java.util.zip.Adler32
 import java.util.zip.ZipFile
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [36])
+@Config(sdk = [35])
 class CompatibilityConfigTest {
 
     private lateinit var context: Context
