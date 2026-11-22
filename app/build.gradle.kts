@@ -8,6 +8,20 @@ plugins {
     alias(libs.plugins.google.services)
 }
 
+val releaseStoreFile = providers.environmentVariable("KEYSTORE_PATH").orNull
+    ?.takeIf { it.isNotBlank() }
+    ?.let(::file)
+    ?: file("${rootDir}/my-upload-key.jks")
+val releaseStorePassword = providers.environmentVariable("STORE_PASSWORD").orNull
+val releaseKeyAlias = providers.environmentVariable("KEY_ALIAS").orNull
+val releaseKeyPassword = providers.environmentVariable("KEY_PASSWORD").orNull
+
+val hasReleaseSigning =
+    releaseStoreFile.isFile &&
+        !releaseStorePassword.isNullOrBlank() &&
+        !releaseKeyAlias.isNullOrBlank() &&
+        !releaseKeyPassword.isNullOrBlank()
+
 android {
     namespace = "com.example"
     compileSdk {
@@ -41,22 +55,13 @@ android {
     }
 
     signingConfigs {
-        create("release") {
-            val keystorePath =
-                System.getenv("KEYSTORE_PATH")
-                    ?: "${rootDir}/my-upload-key.jks"
-
-            storeFile = file(keystorePath)
-            storePassword = System.getenv("STORE_PASSWORD")
-            keyAlias = "upload"
-            keyPassword = System.getenv("KEY_PASSWORD")
-        }
-
-        create("debugConfig") {
-            storeFile = file("${rootDir}/debug.keystore")
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = releaseStoreFile
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
         }
     }
 
@@ -70,13 +75,14 @@ android {
                 "proguard-rules.pro"
             )
 
-            signingConfig =
-                signingConfigs.getByName("release")
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
 
+        // Leave debug signing unset so the Android Gradle Plugin uses its
+        // standard automatically generated debug signing configuration.
         debug {
-            signingConfig =
-                signingConfigs.getByName("debugConfig")
         }
     }
 
@@ -90,7 +96,6 @@ android {
         buildConfig = true
     }
 
-    // FIX: Remove hardcoded Robolectric path
     testOptions {
         unitTests {
             isIncludeAndroidResources = true
@@ -110,8 +115,7 @@ secrets {
 }
 
 googleServices {
-    missingGoogleServicesStrategy =
-        MissingGoogleServicesStrategy.WARN
+    missingGoogleServicesStrategy = MissingGoogleServicesStrategy.WARN
 }
 
 dependencies {
