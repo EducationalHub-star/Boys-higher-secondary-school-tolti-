@@ -1,4 +1,3 @@
-
 name: Build School APK
 
 on:
@@ -6,9 +5,8 @@ on:
   push:
     branches:
       - main
-
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -19,57 +17,27 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout Repository
       - name: Checkout source
         uses: actions/checkout@v4
 
-      # 2. Setup Java 17
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
-      # 3. Setup Gradle
-      - name: Set up Gradle
+      - name: Set up Gradle 9.3.1
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 9.3.1
 
-      # 4. Restore Original Debug Keystore
-      - name: Restore Original Debug Keystore
-        run: |
-          set -e
+      - name: Run unit tests
+        run: gradle :app:testDebugUnitTest --no-daemon
 
-          if [ -f "$GITHUB_WORKSPACE/debug.keystore.base64" ]; then
-            tr -d '\r\n' < "$GITHUB_WORKSPACE/debug.keystore.base64" \
-              | base64 -d > "$GITHUB_WORKSPACE/debug.keystore"
-
-            echo "Original debug.keystore restored"
-          else
-            echo "ERROR: debug.keystore.base64 not found"
-            exit 1
-          fi
-
-          keytool -list -v \
-            -keystore "$GITHUB_WORKSPACE/debug.keystore" \
-            -storepass android \
-            -alias androiddebugkey \
-            | grep -E "SHA1:|SHA256:"
-
-      # 5. Build APK
       - name: Build APK
-        run: |
-          gradle assembleDebug --no-daemon
+        run: gradle assembleDebug --no-daemon
 
-      # 6. Run Unit Tests
-      - name: Run Unit Tests
-        run: |
-          gradle :app:testDebugUnitTest --no-daemon
-        continue-on-error: true
-
-      # 7. Verify APK Integrity
-      - name: Verify APK Integrity, DEX, Signature, Package and minSdk
+      - name: Verify APK integrity, DEX, signature, package and minSdk
         shell: bash
         run: |
           set -euo pipefail
@@ -83,7 +51,6 @@ jobs:
           unzip -t "$APK" > /dev/null
 
           echo "Checking APK internal files and DEX checksums..."
-
           python3 - "$APK" <<'EOF'
           import hashlib
           import re
@@ -94,44 +61,30 @@ jobs:
 
           apk_path = sys.argv[1]
 
-          with zipfile.ZipFile(apk_path, 'r') as zf:
-              bad = zf.testzip()
-              assert bad is None, f"Corrupted ZIP entry: {bad}"
+          with zipfile.ZipFile(apk_path, "r") as zf:
+              assert zf.testzip() is None, f"Corrupted ZIP entry: {zf.testzip()}"
 
               names = zf.namelist()
-
-              assert "AndroidManifest.xml" in names, \
-                  "AndroidManifest.xml missing"
-
-              assert "resources.arsc" in names, \
-                  "resources.arsc missing"
+              assert "AndroidManifest.xml" in names, "AndroidManifest.xml missing"
+              assert "resources.arsc" in names, "resources.arsc missing"
 
               dex_names = sorted(
-                  n for n in names
-                  if re.match(r"^classes\d*\.dex$", n)
+                  name for name in names
+                  if re.match(r"^classes\\d*\\.dex$", name)
               )
-
               assert dex_names, "No DEX files found"
 
               for name in dex_names:
                   data = zf.read(name)
-
-                  assert len(data) >= 112, \
-                      f"{name} is too small"
-
-                  assert data[:4] == b"dex\n", \
-                      f"Invalid DEX magic: {name}"
+                  assert len(data) >= 112, f"{name} is too small"
+                  assert data[:4] == b"dex\n", f"Invalid DEX magic: {name}"
 
                   adler, = struct.unpack_from("<I", data, 8)
-                  sha1_hdr = data[12:32]
                   file_size, = struct.unpack_from("<I", data, 32)
 
-                  assert file_size == len(data), \
-                      f"{name} file size mismatch"
-
-                  assert hashlib.sha1(data[32:]).digest() == sha1_hdr, \
+                  assert file_size == len(data), f"{name} file size mismatch"
+                  assert hashlib.sha1(data[32:]).digest() == data[12:32], \
                       f"{name} SHA-1 checksum mismatch"
-
                   assert (zlib.adler32(data[12:]) & 0xFFFFFFFF) == adler, \
                       f"{name} Adler32 checksum mismatch"
 
@@ -140,7 +93,7 @@ jobs:
               print(dex_names)
           EOF
 
-          # Android SDK tools
+          echo "Using Android SDK tools..."
           SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
 
           if [ -z "$SDK_ROOT" ]; then
@@ -149,8 +102,7 @@ jobs:
           fi
 
           BUILD_TOOLS_DIR=$(find "$SDK_ROOT/build-tools" \
-            -mindepth 1 -maxdepth 1 -type d \
-            | sort -V | tail -n 1)
+            -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)
 
           if [ -z "$BUILD_TOOLS_DIR" ]; then
             echo "ERROR: Android Build Tools not found"
@@ -159,31 +111,18 @@ jobs:
 
           echo "Using Android Build Tools: $BUILD_TOOLS_DIR"
 
-          # Verify APK signature
           echo "Verifying APK signature..."
+          "$BUILD_TOOLS_DIR/apksigner" verify --verbose --print-certs "$APK"
 
-          "$BUILD_TOOLS_DIR/apksigner" verify \
-            --verbose \
-            --print-certs \
-            "$APK"
-
-          # Verify package name
           echo "Checking package name..."
-
           BADGING=$("$BUILD_TOOLS_DIR/aapt2" dump badging "$APK")
 
           echo "$BADGING" | grep -E \
             "package:|sdkVersion:|targetSdkVersion:|native-code:"
+          echo "$BADGING" | grep -q "package: name='com.aistudio.kasurumaltok.vzrkx'"
 
-          echo "$BADGING" | grep -q \
-            "package: name='com.aistudio.kasurumaltok.vzrkx'"
-
-          # Verify Minimum SDK using apkanalyzer
-          echo "Checking Minimum SDK..."
-
-          APK_ANALYZER=$(find "$SDK_ROOT" \
-            -type f -name apkanalyzer \
-            | head -n 1)
+          echo "Checking minimum SDK using apkanalyzer..."
+          APK_ANALYZER=$(find "$SDK_ROOT" -type f -name apkanalyzer | head -n 1)
 
           if [ -z "$APK_ANALYZER" ]; then
             echo "ERROR: apkanalyzer not found"
@@ -201,21 +140,15 @@ jobs:
 
           echo "APK verification completed successfully"
 
-      # 8. Generate SHA256
       - name: Generate SHA256
         run: |
           set -e
-
           cd app/build/outputs/apk/debug
-
           sha256sum app-debug.apk > app-debug.apk.sha256
-
           sha256sum -c app-debug.apk.sha256
-
           cat app-debug.apk.sha256
 
-      # 9. Upload APK Artifact
-      - name: Upload Build Files
+      - name: Upload verified APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: CampusConnect-Verified-APK
@@ -224,19 +157,3 @@ jobs:
             app/build/outputs/apk/debug/app-debug.apk.sha256
           compression-level: 0
           if-no-files-found: error
-
-      # 10. Publish Direct APK Download
-      - name: Publish Direct APK Download
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -e
-
-          gh release create "apk-${{ github.run_id }}-${{ github.run_attempt }}" \
-            app/build/outputs/apk/debug/app-debug.apk \
-            app/build/outputs/apk/debug/app-debug.apk.sha256 \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --title "CampusConnect APK Build ${{ github.run_number }}" \
-            --notes "Verified CampusConnect Android APK (Android 6.0 API 23+, SHA-256 verified)" \
-            --latest=false
