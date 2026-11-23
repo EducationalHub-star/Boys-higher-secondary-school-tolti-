@@ -151,8 +151,9 @@ service cloud.firestore {
     }
 
     match /student_results/{resultId} {
-      allow get: if isValidId(resultId) && (existing().isPublished == true || isAdmin());
-      allow list: if resource.data.isPublished == true || isAdmin();
+      // Names and roll numbers are personal data; published status is not authorization.
+      // Result lookup continues through the app's local Room-backed result feature.
+      allow get, list: if isAdmin();
       allow create, update: if isValidId(resultId) && isAdmin() && isValidStudentResult(incoming());
       allow delete: if isValidId(resultId) && isAdmin();
     }
@@ -167,18 +168,18 @@ service cloud.firestore {
     match /teacher_ratings/{ratingId} {
       allow get: if isValidId(ratingId) && (existing().isApproved == true || isAdmin());
       allow list: if resource.data.isApproved == true || isAdmin();
+      // Client submissions are always pending; publication requires an authorized admin update.
       allow create: if isValidId(ratingId) && isSignedIn() &&
         isValidTeacherRating(incoming()) &&
         incoming().authorUid == request.auth.uid &&
-        incoming().isApproved == true;
-      allow update: if isValidId(ratingId) &&
-        isValidTeacherRating(incoming()) && (
-          isAdmin() ||
-          (isSignedIn() &&
-            existing().authorUid == request.auth.uid &&
-            incoming().authorUid == existing().authorUid &&
-            incoming().isApproved == existing().isApproved)
-        );
+        incoming().isApproved == false;
+      allow update: if isValidId(ratingId) && isValidTeacherRating(incoming()) && (
+        isAdmin() ||
+        (isSignedIn() &&
+          existing().authorUid == request.auth.uid &&
+          incoming().authorUid == existing().authorUid &&
+          incoming().isApproved == existing().isApproved)
+      );
       allow delete: if isValidId(ratingId) && isAdmin();
     }
 
